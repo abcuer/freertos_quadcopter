@@ -10,16 +10,12 @@
 void System_Init(void)
 {
     LedDevice_Init();
-    if(BMI088_Init() == 0) 
-    {
-        SetLedMode(rLEDL, LED_ON); // 左红灯表示BMI088初始化成功
-        delay_ms(500);
-    }
+    BMI088_Init();
 
     // NRF24L01_init();
 
     // SPL06_Init();
     // Flow_Init();    
-//    Motor_Init();
+    Motor_Init();
     delay_ms(3000);
 }

@@ -105,71 +105,42 @@ static void ImuUpdate(float gx, float gy, float gz, float ax, float ay, float az
     else if (bmi.yaw < -180.0f) bmi.yaw += 360.0f;
 }
 
-
-
 void IMU_GetAngle(uint8_t on)
-
 {
-
     BMI088_GetData(&bmi);
-
-
-
 	//陀螺仪量程为:±250 dps     获取到的陀螺仪数据除以131           可以转化为带物理单位的数据，单位为：°/s
-
 	//陀螺仪量程为:±500 dps     获取到的陀螺仪数据除以65.5          可以转化为带物理单位的数据，单位为：°/s
-
 	//陀螺仪量程为:±1000dps     获取到的陀螺仪数据除以32.8          可以转化为带物理单位的数据，单位为：°/s
-
 	//陀螺仪量程为:±2000dps     获取到的陀螺仪数据除以16.4          可以转化为带物理单位的数据，单位为：°/s
 
-
-
 	//加速度计量程为:±2g        获取到的加速度计数据 除以16384      可以转化为带物理单位的数据，单位：g(m/s^2)
-
 	//加速度计量程为:±4g        获取到的加速度计数据 除以8192       可以转化为带物理单位的数据，单位：g(m/s^2)
-
 	//加速度计量程为:±8g        获取到的加速度计数据 除以4096       可以转化为带物理单位的数据，单位：g(m/s^2)
-
 	//加速度计量程为:±16g       获取到的加速度计数据 除以2048       可以转化为带物理单位的数据，单位：g(m/s^2)
 
+	ax = (float)bmi.acc_raw[0] * 0.000183105f; 
+	ay = (float)bmi.acc_raw[1] * 0.000183105f;
+	az = (float)bmi.acc_raw[2] * 0.000183105f;
 
-	ax = (float)bmi.acc[0] * 0.000183105f; 
+	bmi.gyro[0] = (float)bmi.gyro_raw[0] * 0.0609756f;
+	bmi.gyro[1] = (float)bmi.gyro_raw[1] * 0.0609756f;
+	bmi.gyro[2] = (float)bmi.gyro_raw[2] * 0.0609756f;
 
-	ay = (float)bmi.acc[1] * 0.000183105f;
-
-	az = (float)bmi.acc[2] * 0.000183105f;
-
-
-
-	bd_gx = (float)bmi.gyro[0] * 0.0609756f;
-
-	bd_gy = (float)bmi.gyro[1] * 0.0609756f;
-
-	bd_gz = (float)bmi.gyro[2] * 0.0609756f;
-
+	bd_gx = bmi.gyro[0];
+	bd_gy = bmi.gyro[1];
+	bd_gz = bmi.gyro[2];
 
 	bd_ax = 1.0064f*ax - 717.6192f;
-
 	bd_ay = 1.0104f*ay + 39.3216f;
-
 	bd_az = 0.9762f*az + 704.5120f;
 
-
 	LPF_1_(1.8f, 0.002f, bd_gx*0.0174533f, gx);
-
 	LPF_1_(1.8f, 0.002f, bd_gy*0.0174533f, gy);
 
-
 	acc_sp[0] += (az-0.995f)/3.0f;
-
 	acc_sp[1] += ax * 5.2f;
-
 	acc_sp[2] -= ay * 5.2f;
 
-
 	if(on == 1)
-
-	ImuUpdate(bd_gx*0.0174533f, bd_gy*0.0174533f, bd_gz*0.0174533f, bd_ax, bd_ay, bd_az);
-
+		ImuUpdate(bd_gx*0.0174533f, bd_gy*0.0174533f, bd_gz*0.0174533f, bd_ax, bd_ay, bd_az);
 }

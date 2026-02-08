@@ -84,16 +84,10 @@ static void BMI088_Read_Acc(IMU_t *imu)
         raw[1] = (int16_t)((acc_raw[4] << 8) | acc_raw[3]); // Y
         raw[2] = (int16_t)((acc_raw[6] << 8) | acc_raw[5]); // Z
 
-        // 统一限幅和缩放
-        // for(int i = 0; i < 3; i++) {
-        //     if(raw[i] > 21178) raw[i] = 21178;
-        //     else if(raw[i] < -21178) raw[i] = -21178;
-        //     raw[i] = raw[i] + (raw[i] >> 1);
-        // }
         // 根据背面安装要求取反 Y, Z
-        imu->acc[0] = raw[0];
-        imu->acc[1] = -raw[1]; 
-        imu->acc[2] = -raw[2]; 
+        imu->acc_raw[0] = raw[0];
+        imu->acc_raw[1] = -raw[1]; 
+        imu->acc_raw[2] = -raw[2]; 
     }
 }
 /**
@@ -101,33 +95,17 @@ static void BMI088_Read_Acc(IMU_t *imu)
  */
 static void BMI088_Read_Gyro(IMU_t *imu)
 {
-    uint8_t gyro_raw[6];
+    int16_t gyro_raw[6];
     if(IIC_Read_Multi_Byte(&bmi088_bus, BMI088_GYRO_ADDR, 0x02, 6, gyro_raw) == 0) 
     {
         // 解析原始数据
-        imu->gyro[0] = (int16_t)((gyro_raw[1] << 8) | gyro_raw[0]); // X轴
-        imu->gyro[1] = (int16_t)((gyro_raw[3] << 8) | gyro_raw[2]); // Y轴
-        imu->gyro[2] = (int16_t)((gyro_raw[5] << 8) | gyro_raw[4]); // Z轴
+        imu->gyro_raw[0] = (int16_t)((gyro_raw[1] << 8) | gyro_raw[0]); // X轴
+        imu->gyro_raw[1] = (int16_t)((gyro_raw[3] << 8) | gyro_raw[2]); // Y轴
+        imu->gyro_raw[2] = (int16_t)((gyro_raw[5] << 8) | gyro_raw[4]); // Z轴
         // 根据背面安装要求取反 Y, Z
-        imu->gyro[1] = -imu->gyro[1];
-        imu->gyro[2] = -imu->gyro[2];
+        imu->gyro_raw[1] = -imu->gyro_raw[1];
+        imu->gyro_raw[2] = -imu->gyro_raw[2];
     }
-}
-
-/**
- * @brief 读取温度数据
- * @return 转换后的浮点摄氏度
- */
-static void BMI088_Read_Temp(IMU_t *imu)
-{
-    uint8_t tem_raw[3]; // 1字节哑字节 + 2字节数据
-    int16_t temp_uint11;
-
-    IIC_Read_Multi_Byte(&bmi088_bus, BMI088_ACC_ADDR, 0x22, 3, tem_raw);
-    temp_uint11 = (int16_t)((tem_raw[1] << 3) | (tem_raw[2] >> 5));
-    if (temp_uint11 > 1023) temp_uint11 -= 2048; // 处理补码
-    
-    imu->temp = (float)temp_uint11 * 0.125f + 23.0f;
 }
 
 /**

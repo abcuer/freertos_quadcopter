@@ -95,14 +95,14 @@ int main(void)
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
   System_Init();
-    
+  MotorTest();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    main_loop();
+    // main_loop();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
