@@ -1,9 +1,15 @@
 #include "control.h"
 #include "pid.h"
 #include "motor.h"
+#include "filter.h"
+#include "imu.h"
 
-IMU_t bmi;   
 float basepwm = 0.0f;
+
+// 定义陀螺仪和加速度
+Gyro_Acc_Struct gyro_acc;
+// 定义欧拉角
+EulerAngle_Struct euler_angle;
 
 PID_t rate_pitch_pid =
 {
@@ -75,6 +81,26 @@ PID_t yaw_pid =
     .mode = POSITION_PID,
 };
 
+void IMU_Get_Gyro_Acc(Gyro_Acc_Struct *gyro_acc)
+{
+    Gyro_Struct last_gyro;
+    BMI088_Read(gyro_acc);
+    // 需要进行滤波
+    // 角速度采用一阶低通滤波
+    gyro_acc->gyro.x = Filter_LowPass(gyro_acc->gyro.x, last_gyro.x);
+    gyro_acc->gyro.y = Filter_LowPass(gyro_acc->gyro.y, last_gyro.y);
+    gyro_acc->gyro.z = Filter_LowPass(gyro_acc->gyro.z, last_gyro.z);
+    // 加速度采用卡尔曼滤波
+    gyro_acc->acc.x = Filter_KalmanFilter(&kfs[0], gyro_acc->acc.x);
+    gyro_acc->acc.y = Filter_KalmanFilter(&kfs[1], gyro_acc->acc.y);
+    gyro_acc->acc.z = Filter_KalmanFilter(&kfs[2], gyro_acc->acc.z);
+}
+
+void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, float dt)
+{
+    IMU_GetEulerAngle(gyro_acc, euler_angle, dt);
+}
+
 void PIDParam_Init(void)
 {
     PID_Init(&pitch_pid);
@@ -87,40 +113,40 @@ void PIDParam_Init(void)
 
 void PitchPidCtrl(void)
 {
-    pitch_pid.now = bmi.pitch;
+    pitch_pid.now = euler_angle.pitch;
     PidCalculate(&pitch_pid);
 }
 
 void RatePitchPID(void)
 {
     rate_pitch_pid.tar = pitch_pid.out;
-    rate_pitch_pid.now = bmi.gyro[0];
+    rate_pitch_pid.now = gyro_acc.gyro.x;
     PidCalculate(&rate_pitch_pid);
 }
 
 void RollPidCtrl(void)
 {
-    roll_pid.now = bmi.roll;
+    roll_pid.now = euler_angle.roll;
     PidCalculate(&roll_pid);
 }
 
 void RateRollPID(void)
 {
     rate_roll_pid.tar = roll_pid.out;
-    rate_roll_pid.now = bmi.gyro[1];
+    rate_roll_pid.now = gyro_acc.gyro.y;
     PidCalculate(&rate_roll_pid);
 }
 
 void YawPidCtrl(void)
 {
-    yaw_pid.now = bmi.yaw;
+    yaw_pid.now = euler_angle.yaw;
     PidCalculate(&yaw_pid);
 }
 
 void RateYawPID(void)
 {
     rate_yaw_pid.tar = yaw_pid.out;
-    rate_yaw_pid.now = bmi.gyro[2];
+    rate_yaw_pid.now = gyro_acc.gyro.z;
     PidCalculate(&rate_yaw_pid);
 }
 

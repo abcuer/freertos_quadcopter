@@ -18,6 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "control.h"
+#include "led.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -95,14 +97,16 @@ int main(void)
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
   System_Init();
-  MotorTest();
+  // MotorTest();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // main_loop();
+
+    // BMI088_Read(&gyro_acc);
+    main_loop();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

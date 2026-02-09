@@ -1,10 +1,23 @@
-#ifndef _IMU_H
-#define _IMU_H
-
+#ifndef __IMU_H__
+#define __IMU_H__
 #include "bmi088.h"
-#include "control.h"
 
-#define LPF_1_(hz,t,in,out) ((out) += ( 1 / ( 1 + 1 / ( (hz) *3.14f *(t) ) ) ) *( (in) - (out) ))
-void IMU_GetAngle(uint8_t on);
+/* 表示四元数的结构体 */
+typedef struct
+{
+    float q0;
+    float q1;
+    float q2;
+    float q3;
+} Quaternion_Struct;
 
-#endif
+extern float RtA;
+extern float Gyro_G;
+extern float Gyro_Gr;
+
+void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
+                        EulerAngle_Struct *eulerAngle,
+                        float              dt);
+float IMU_GetNormAccZ(void);
+
+#endif /* __COM_IMU_H__ */

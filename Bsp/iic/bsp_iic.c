@@ -227,7 +227,7 @@ uint8_t IIC_Write_One_Byte(iic_bus_t *bus, uint8_t daddr,uint8_t reg,uint8_t dat
   IICStart(bus);  
 	
 	IICSendByte(bus,daddr<<1);	    
-	if(IICWaitAck(bus))	//�ȴ�Ӧ��
+	if(IICWaitAck(bus))	
 	{
 		IICStop(bus);		 
 		return 1;		
@@ -359,16 +359,15 @@ uint8_t IIC_Read_Multi_Byte(iic_bus_t *bus, uint8_t daddr, uint8_t reg, uint8_t 
 void IICInit(iic_bus_t *bus)
 {
     GPIO_InitTypeDef GPIO_InitStructure = {0};
-
-		//bus->CLK_ENABLE();
-		
-    GPIO_InitStructure.Pin = bus->IIC_SDA_PIN ;
-    GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
+    // 统一使用开漏输出，配合外部上拉
+    GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_OD; 
     GPIO_InitStructure.Pull = GPIO_PULLUP;
     GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
+    
+    GPIO_InitStructure.Pin = bus->IIC_SDA_PIN;
     HAL_GPIO_Init(bus->IIC_SDA_PORT, &GPIO_InitStructure);
-		
-		GPIO_InitStructure.Pin = bus->IIC_SCL_PIN ;
+    
+    GPIO_InitStructure.Pin = bus->IIC_SCL_PIN;
     HAL_GPIO_Init(bus->IIC_SCL_PORT, &GPIO_InitStructure);
 }
 

@@ -1,24 +1,21 @@
-#ifndef _FILTER_H
-#define _FILTER_H
+#ifndef __FILTER_H__
+#define __FILTER_H__
+#include "stdint.h"
 
-#include "main.h"
+/* 卡尔曼滤波器结构体 */
+typedef struct
+{
+    float LastP; // 上一时刻的状态方差（或协方差）
+    float Now_P; // 当前时刻的状态方差（或协方差）
+    float out;   // 滤波器的输出值，即估计的状态
+    float Kg;    // 卡尔曼增益，用于调节预测值和测量值之间的权重
+    float Q;     // 过程噪声的方差，反映系统模型的不确定性
+    float R;     // 测量噪声的方差，反映测量过程的不确定性
+} KalmanFilter_Struct;
 
-#define PI 3.1415926f
+extern KalmanFilter_Struct kfs[3];
+int16_t Filter_LowPass(int16_t newValue, int16_t preFilteredValue);
 
-typedef struct {
-    double Q_angle;
-    double Q_bias;
-    double R_measure;
-    double angle;
-    double bias;
-    double P[2][2];
-} Kalman_t;
+double Filter_KalmanFilter(KalmanFilter_Struct *kf, double input);
 
-extern Kalman_t KalmanX,KalmanY;
-extern float angle;
-void FirstOrderLowPassFilter(float angle_m, float gyro_m, float dt);
-double Kalman_getAngle(Kalman_t *Kalman, double newAngle, double newRate, double dt);
- 
-
-#endif
-
+#endif /* __COM_FILTER_H__ */

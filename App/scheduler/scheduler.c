@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "bmi088.h"
 #include "headfile.h"
 #include "led.h"
 
@@ -34,22 +35,20 @@ void main_loop()
 	// if( loop.check_flag >= 1 )
 	// {
 		
-		if( loop.cnt_2ms >= 1 )
-		{
-			loop.cnt_2ms = 0;
-            SetLedMode(bLEDL, LED_ON);
-            SetLedMode(bLEDR, LED_OFF);
-			Duty_2ms();	 					//ÖÜÆÚ2msµÄÈÎÎñ
-		}
+		// if( loop.cnt_2ms >= 1 )
+		// {
+		// 	loop.cnt_2ms = 0;
+        //     SetLedMode(bLEDL, LED_ON);
+        //     SetLedMode(bLEDR, LED_OFF);
+		// 	Duty_2ms();	 					
+		// }
 		// if( loop.cnt_4ms >= 2 )
 		// {
 		// 	loop.cnt_4ms = 0;
 		// 	Duty_4ms();						//ÖÜÆÚ4msµÄÈÎÎñ
 		// }
-		if( loop.cnt_6ms >= 4 )
+		if( loop.cnt_6ms >= 3 )
 		{
-            SetLedMode(bLEDR, LED_ON);
-            SetLedMode(bLEDL, LED_OFF);
 			loop.cnt_6ms = 0;
 			Duty_6ms();						//ÖÜÆÚ6msµÄÈÎÎñ
 		}
@@ -86,10 +85,12 @@ void Duty_2ms()
     time[0] = GetSysTime_us() - time[0];
 }
 
+
 void Duty_6ms()
 {
     time[1] = GetSysTime_us();
 
-    IMU_GetAngle(1); // 8ms调用一次
+	BMI088_Read(&gyro_acc);
+
     time[1] = GetSysTime_us() - time[1];
 }
