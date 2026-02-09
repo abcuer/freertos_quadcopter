@@ -1,5 +1,6 @@
 #include "scheduler.h"
 #include "bmi088.h"
+#include "control.h"
 #include "headfile.h"
 #include "led.h"
 
@@ -90,7 +91,7 @@ void Duty_6ms()
 {
     time[1] = GetSysTime_us();
 
-	BMI088_Read(&gyro_acc);
-
+	IMU_Get_Gyro_Acc(&gyro_acc);
+	IMU_GetEulerAngle(&gyro_acc, &euler_angle, 0.006f);
     time[1] = GetSysTime_us() - time[1];
 }

@@ -81,19 +81,30 @@ PID_t yaw_pid =
     .mode = POSITION_PID,
 };
 
+static Gyro_Struct last_gyro_filtered = {0};
+
 void IMU_Get_Gyro_Acc(Gyro_Acc_Struct *gyro_acc)
 {
-    Gyro_Struct last_gyro;
+    // 读取数据
     BMI088_Read(gyro_acc);
-    // 需要进行滤波
-    // 角速度采用一阶低通滤波
-    gyro_acc->gyro.x = Filter_LowPass(gyro_acc->gyro.x, last_gyro.x);
-    gyro_acc->gyro.y = Filter_LowPass(gyro_acc->gyro.y, last_gyro.y);
-    gyro_acc->gyro.z = Filter_LowPass(gyro_acc->gyro.z, last_gyro.z);
-    // 加速度采用卡尔曼滤波
-    gyro_acc->acc.x = Filter_KalmanFilter(&kfs[0], gyro_acc->acc.x);
-    gyro_acc->acc.y = Filter_KalmanFilter(&kfs[1], gyro_acc->acc.y);
-    gyro_acc->acc.z = Filter_KalmanFilter(&kfs[2], gyro_acc->acc.z);
+    
+    // 陀螺仪低通滤波（使用浮点计算）
+    float alpha = 0.18f;
+    
+    // 转换为浮点计算，再转回整数
+    last_gyro_filtered.x = (int16_t)(alpha * gyro_acc->gyro.x + 
+                                    (1.0f - alpha) * last_gyro_filtered.x);
+    last_gyro_filtered.y = (int16_t)(alpha * gyro_acc->gyro.y + 
+                                    (1.0f - alpha) * last_gyro_filtered.y);
+    last_gyro_filtered.z = (int16_t)(alpha * gyro_acc->gyro.z + 
+                                    (1.0f - alpha) * last_gyro_filtered.z);
+    
+    gyro_acc->gyro = last_gyro_filtered;
+    
+    // 加速度计卡尔曼滤波
+    gyro_acc->acc.x = (int16_t)Filter_KalmanFilter(&kfs[0], (double)gyro_acc->acc.x);
+    gyro_acc->acc.y = (int16_t)Filter_KalmanFilter(&kfs[1], (double)gyro_acc->acc.y);
+    gyro_acc->acc.z = (int16_t)Filter_KalmanFilter(&kfs[2], (double)gyro_acc->acc.z);
 }
 
 void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, float dt)

@@ -21,7 +21,14 @@ int16_t Filter_LowPass(int16_t newValue, int16_t preFilteredValue)
 KalmanFilter_Struct kfs[3] = {
     {0.02, 0, 0, 0, 0.001, 0.543},
     {0.02, 0, 0, 0, 0.001, 0.543},
-    {0.02, 0, 0, 0, 0.001, 0.543}};
+    {0.02, 0, 0, 0, 0.001, 0.543}
+};
+// 建议的加速度计卡尔曼参数
+// KalmanFilter_Struct kfs[3] = {
+//     {0.02, 0, 0, 0, 0.01, 0.1},  // Q=0.01, R=0.1
+//     {0.02, 0, 0, 0, 0.01, 0.1},
+//     {0.02, 0, 0, 0, 0.01, 0.1}
+// };
 double Filter_KalmanFilter(KalmanFilter_Struct *kf, double input)
 {
     kf->Now_P = kf->LastP + kf->Q;

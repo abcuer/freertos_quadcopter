@@ -11,6 +11,12 @@ float Gyro_G = 4000.0 / 65536;  // 度/s
 // 度每秒,转换弧度每秒则 2*0.03051756 * 0.0174533f = 0.0005326*2
 // float Gyro_Gr = 0.0005326f * 2;
 float Gyro_Gr = 4000.0 / 65536 / 180 * 3.1415926; // 弧度/s
+
+// float Gyro_G = 0.06103515625f;  // 1/16.384
+
+// // 弧度/秒：Gyro_G * (π/180)
+// float Gyro_Gr = 0.06103515625f * 0.01745329251994329576f;
+
 #define squa(Sq) (((float)Sq) * ((float)Sq)) /* 计算平方 */
 /**
  * @description: 快速计算 1/sqrt(num)
@@ -32,17 +38,151 @@ static float Q_rsqrt(float number)
 }
 
 static double normAccz; /* z轴上的加速度 */
+
 /**
- * @description: 根据mpu的6轴数据, 获取表征姿态的欧拉角
- * @param {GyroAccel_Struct} *gyroAccel mpu的6轴数据
- * @param {EulerAngle_Struct} *EulerAngle 计算后得到的欧拉角
- * @param {float} dt 采样周期 (单位s)
- * @return {*}
+ * @brief 改进的Mahony算法，带自适应零偏补偿
  */
+// void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
+//                                 EulerAngle_Struct *eulerAngle,
+//                                 float dt)
+// {
+//     #define BMI088_GYRO_SENSITIVITY 16.384f
+//     #define BMI088_ACC_SENSITIVITY  8192.0f
+//     #define DEG_TO_RAD 0.01745329251994329576f
+    
+//     static Quaternion_Struct q = {1, 0, 0, 0};
+//     static float integralFBx = 0, integralFBy = 0, integralFBz = 0;
+//     static float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+//     static uint32_t stationary_time = 0;
+    
+//     // 转换单位
+//     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+//     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+//     float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+    
+//     float gx_raw = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY;  // °/s
+//     float gy_raw = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY;
+//     float gz_raw = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY;
+    
+//     // ============ 自适应参数 ============
+//     float Kp, Ki;
+//     float acc_magnitude = sqrtf(ax*ax + ay*ay + az*az);
+    
+//     if (fabsf(acc_magnitude - 1.0f) < 0.2f) {
+//         // 静止或缓慢运动：信任加速度计
+//         Kp = 1.0f;     // 较大的比例增益
+//         Ki = 0.005f;   // 较大的积分增益
+        
+//         // 更新零偏估计
+//         stationary_time++;
+//         if (stationary_time > 100) {  // 静止0.6秒以上
+//             float alpha = 0.0005f;  // 很慢的零偏估计
+//             gyro_bias_x = (1.0f - alpha) * gyro_bias_x + alpha * gx_raw;
+//             gyro_bias_y = (1.0f - alpha) * gyro_bias_y + alpha * gy_raw;
+//             gyro_bias_z = (1.0f - alpha) * gyro_bias_z + alpha * gz_raw;
+//         }
+//     } else {
+//         // 剧烈运动：信任陀螺仪
+//         Kp = 0.1f;     // 较小的比例增益
+//         Ki = 0.0f;     // 关闭积分
+//         stationary_time = 0;
+//     }
+    
+//     // 应用零偏补偿
+//     float gx = (gx_raw - gyro_bias_x) * DEG_TO_RAD;
+//     float gy = (gy_raw - gyro_bias_y) * DEG_TO_RAD;
+//     float gz = (gz_raw - gyro_bias_z) * DEG_TO_RAD;
+    
+//     // Mahony算法核心
+//     float recipNorm;
+//     float halfvx, halfvy, halfvz;
+//     float halfex, halfey, halfez;
+//     float qa, qb, qc;
+    
+//     // 计算误差
+//     if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+//         recipNorm = 1.0f / sqrtf(ax * ax + ay * ay + az * az);
+//         ax *= recipNorm;
+//         ay *= recipNorm;
+//         az *= recipNorm;
+        
+//         halfvx = q.q1 * q.q3 - q.q0 * q.q2;
+//         halfvy = q.q0 * q.q1 + q.q2 * q.q3;
+//         halfvz = q.q0 * q.q0 - 0.5f + q.q3 * q.q3;
+        
+//         halfex = (ay * halfvz - az * halfvy);
+//         halfey = (az * halfvx - ax * halfvz);
+//         halfez = (ax * halfvy - ay * halfvx);
+        
+//         // 积分误差
+//         if(Ki > 0.0f) {
+//             integralFBx += Ki * halfex * dt;
+//             integralFBy += Ki * halfey * dt;
+//             integralFBz += Ki * halfez * dt;
+            
+//             gx += integralFBx;
+//             gy += integralFBy;
+//             gz += integralFBz;
+//         }
+        
+//         // 比例反馈
+//         gx += Kp * halfex;
+//         gy += Kp * halfey;
+//         gz += Kp * halfez;
+//     }
+    
+//     // 积分四元数
+//     gx *= (0.5f * dt);
+//     gy *= (0.5f * dt);
+//     gz *= (0.5f * dt);
+    
+//     qa = q.q0;
+//     qb = q.q1;
+//     qc = q.q2;
+    
+//     q.q0 += (-qb * gx - qc * gy - q.q3 * gz);
+//     q.q1 += (qa * gx + qc * gz - q.q3 * gy);
+//     q.q2 += (qa * gy - qb * gz + q.q3 * gx);
+//     q.q3 += (qa * gz + qb * gy - qc * gx);
+    
+//     // 归一化
+//     recipNorm = 1.0f / sqrtf(q.q0 * q.q0 + q.q1 * q.q1 + 
+//                             q.q2 * q.q2 + q.q3 * q.q3);
+//     q.q0 *= recipNorm;
+//     q.q1 *= recipNorm;
+//     q.q2 *= recipNorm;
+//     q.q3 *= recipNorm;
+    
+//     // 计算欧拉角
+//     float sinr_cosp = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
+//     float cosr_cosp = 1.0f - 2.0f * (q.q1 * q.q1 + q.q2 * q.q2);
+//     eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * 57.29578f;
+
+//     float sinp = 2.0f * (q.q0 * q.q2 - q.q3 * q.q1);
+//     if (fabsf(sinp) >= 1.0f) {
+//         eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * 57.29578f;
+//     } else {
+//         eulerAngle->pitch = asinf(sinp) * 57.29578f;
+//     }
+
+//     float siny_cosp = 2.0f * (q.q0 * q.q3 + q.q1 * q.q2);
+//     float cosy_cosp = 1.0f - 2.0f * (q.q2 * q.q2 + q.q3 * q.q3);
+//     eulerAngle->yaw = atan2f(siny_cosp, cosy_cosp) * 57.29578f;
+// }
+
+ /**
+ * @brief 修改后的欧拉角解算函数，适配BMI088
+ */
+
 void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
                               EulerAngle_Struct *eulerAngle,
-                              float              dt)
+                              float dt)
 {
+    // BMI088灵敏度定义
+    #define BMI088_GYRO_SENSITIVITY 16.384f  // LSB/(°/s)
+    #define BMI088_ACC_SENSITIVITY  8192.0f  // LSB/g
+    #define DEG_TO_RAD 0.01745329251994329576f
+    
     volatile struct V
     {
         float x;
@@ -55,34 +195,47 @@ void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
     static float             KiDef          = 0.0003f;
     static Quaternion_Struct NumQ           = {1, 0, 0, 0};
     float                    q0_t, q1_t, q2_t, q3_t;
-    // float NormAcc;
     float NormQuat;
     float HalfTime = dt * 0.5f;
+
+    // ============ 关键修改：单位转换 ============
+    // 1. 将加速度原始值转换为g单位
+    float acc_x_g = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+    float acc_y_g = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+    float acc_z_g = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+    
+    // 2. 将陀螺仪原始值转换为弧度/秒
+    float gyro_x_rad = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    float gyro_y_rad = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    float gyro_z_rad = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    // ===========================================
 
     // 提取等效旋转矩阵中的重力分量
     Gravity.x = 2 * (NumQ.q1 * NumQ.q3 - NumQ.q0 * NumQ.q2);
     Gravity.y = 2 * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
     Gravity.z = 1 - 2 * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
-    // 加速度归一化
-    NormQuat = Q_rsqrt(squa(gyroAccel->acc.x) +
-                       squa(gyroAccel->acc.y) +
-                       squa(gyroAccel->acc.z));
+    
+    // 加速度归一化（使用物理值g）
+    NormQuat = Q_rsqrt(acc_x_g * acc_x_g + acc_y_g * acc_y_g + acc_z_g * acc_z_g);
 
-    Acc.x = gyroAccel->acc.x * NormQuat;
-    Acc.y = gyroAccel->acc.y * NormQuat;
-    Acc.z = gyroAccel->acc.z * NormQuat;
+    Acc.x = acc_x_g * NormQuat;
+    Acc.y = acc_y_g * NormQuat;
+    Acc.z = acc_z_g * NormQuat;
+    
     // 向量差乘得出的值
     AccGravity.x = (Acc.y * Gravity.z - Acc.z * Gravity.y);
     AccGravity.y = (Acc.z * Gravity.x - Acc.x * Gravity.z);
     AccGravity.z = (Acc.x * Gravity.y - Acc.y * Gravity.x);
+    
     // 再做加速度积分补偿角速度的补偿值
     GyroIntegError.x += AccGravity.x * KiDef;
     GyroIntegError.y += AccGravity.y * KiDef;
     GyroIntegError.z += AccGravity.z * KiDef;
-    // 角速度融合加速度积分补偿值
-    Gyro.x = gyroAccel->gyro.x * Gyro_Gr + KpDef * AccGravity.x + GyroIntegError.x;   // 弧度制
-    Gyro.y = gyroAccel->gyro.y * Gyro_Gr + KpDef * AccGravity.y + GyroIntegError.y;
-    Gyro.z = gyroAccel->gyro.z * Gyro_Gr + KpDef * AccGravity.z + GyroIntegError.z;
+    
+    // 角速度融合加速度积分补偿值（使用弧度/秒）
+    Gyro.x = gyro_x_rad + KpDef * AccGravity.x + GyroIntegError.x;
+    Gyro.y = gyro_y_rad + KpDef * AccGravity.y + GyroIntegError.y;
+    Gyro.z = gyro_z_rad + KpDef * AccGravity.z + GyroIntegError.z;
 
     // 一阶龙格库塔法, 更新四元数
     q0_t = (-NumQ.q1 * Gyro.x - NumQ.q2 * Gyro.y - NumQ.q3 * Gyro.z) * HalfTime;
@@ -103,22 +256,121 @@ void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
     NumQ.q3 *= NormQuat;
 
     /*机体坐标系下的Z方向向量*/
-    float vecxZ = 2 * NumQ.q0 * NumQ.q2 - 2 * NumQ.q1 * NumQ.q3;     /*矩阵(3,1)项*/
-    float vecyZ = 2 * NumQ.q2 * NumQ.q3 + 2 * NumQ.q0 * NumQ.q1;     /*矩阵(3,2)项*/
-    float veczZ = 1 - 2 * NumQ.q1 * NumQ.q1 - 2 * NumQ.q2 * NumQ.q2; /*矩阵(3,3)项*/
+    float vecxZ = 2 * NumQ.q0 * NumQ.q2 - 2 * NumQ.q1 * NumQ.q3;
+    float vecyZ = 2 * NumQ.q2 * NumQ.q3 + 2 * NumQ.q0 * NumQ.q1;
+    float veczZ = 1 - 2 * NumQ.q1 * NumQ.q1 - 2 * NumQ.q2 * NumQ.q2;
 
-    float yaw_G = gyroAccel->gyro.z * Gyro_G;   // 将Z轴角速度陀螺仪值 转换为Z角度/秒      Gyro_G陀螺仪初始化量程+-2000度每秒于1 / (65536 / 4000) = 0.03051756*2
-    if((yaw_G > 0.5f) || (yaw_G < -0.5))           // 数据太小可以认为是干扰，不是偏航动作
-    {
-        eulerAngle->yaw += yaw_G * dt;   // 角速度积分成偏航角
+    // ============ 修正偏航角计算 ============
+    // 使用Mahony算法计算的偏航角，而不是单独积分
+    // 从四元数计算所有三个欧拉角
+    float sinr_cosp = 2.0f * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
+    float cosr_cosp = 1.0f - 2.0f * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
+    eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * RtA;
+
+    float sinp = 2.0f * (NumQ.q0 * NumQ.q2 - NumQ.q3 * NumQ.q1);
+    if (fabsf(sinp) >= 1.0f) {
+        eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * RtA;
+    } else {
+        eulerAngle->pitch = asinf(sinp) * RtA;
     }
 
-    eulerAngle->pitch = asin(vecxZ) * RtA;   // 俯仰角
+    float siny_cosp = 2.0f * (NumQ.q0 * NumQ.q3 + NumQ.q1 * NumQ.q2);
+    float cosy_cosp = 1.0f - 2.0f * (NumQ.q2 * NumQ.q2 + NumQ.q3 * NumQ.q3);
+    eulerAngle->yaw = atan2f(siny_cosp, cosy_cosp) * RtA;
 
-    eulerAngle->roll = atan2f(vecyZ, veczZ) * RtA;   // 横滚角
-
-    normAccz = gyroAccel->acc.x * vecxZ + gyroAccel->acc.y * vecyZ + gyroAccel->acc.z * veczZ; /*Z轴垂直方向上的加速度，此值涵盖了倾斜时在Z轴角速度的向量和，不是单纯重力感应得出的值*/
+    // 计算Z轴加速度（可选）
+    static float normAccz;
+    normAccz = acc_x_g * vecxZ + acc_y_g * vecyZ + acc_z_g * veczZ;
 }
+
+/**
+ * @description: 根据mpu的6轴数据, 获取表征姿态的欧拉角
+ * @param {GyroAccel_Struct} *gyroAccel mpu的6轴数据
+ * @param {EulerAngle_Struct} *EulerAngle 计算后得到的欧拉角
+ * @param {float} dt 采样周期 (单位s)
+ * @return {*}
+ */
+
+// void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
+//                               EulerAngle_Struct *eulerAngle,
+//                               float              dt)
+// {
+//     volatile struct V
+//     {
+//         float x;
+//         float y;
+//         float z;
+//     } Gravity, Acc, Gyro, AccGravity;
+
+//     static struct V          GyroIntegError = {0};
+//     static float             KpDef          = 0.8f;
+//     static float             KiDef          = 0.0003f;
+//     static Quaternion_Struct NumQ           = {1, 0, 0, 0};
+//     float                    q0_t, q1_t, q2_t, q3_t;
+//     // float NormAcc;
+//     float NormQuat;
+//     float HalfTime = dt * 0.5f;
+
+//     // 提取等效旋转矩阵中的重力分量
+//     Gravity.x = 2 * (NumQ.q1 * NumQ.q3 - NumQ.q0 * NumQ.q2);
+//     Gravity.y = 2 * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
+//     Gravity.z = 1 - 2 * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
+//     // 加速度归一化
+//     NormQuat = Q_rsqrt(squa(gyroAccel->acc.x) +
+//                        squa(gyroAccel->acc.y) +
+//                        squa(gyroAccel->acc.z));
+
+//     Acc.x = gyroAccel->acc.x * NormQuat;
+//     Acc.y = gyroAccel->acc.y * NormQuat;
+//     Acc.z = gyroAccel->acc.z * NormQuat;
+//     // 向量差乘得出的值
+//     AccGravity.x = (Acc.y * Gravity.z - Acc.z * Gravity.y);
+//     AccGravity.y = (Acc.z * Gravity.x - Acc.x * Gravity.z);
+//     AccGravity.z = (Acc.x * Gravity.y - Acc.y * Gravity.x);
+//     // 再做加速度积分补偿角速度的补偿值
+//     GyroIntegError.x += AccGravity.x * KiDef;
+//     GyroIntegError.y += AccGravity.y * KiDef;
+//     GyroIntegError.z += AccGravity.z * KiDef;
+//     // 角速度融合加速度积分补偿值
+//     Gyro.x = gyroAccel->gyro.x * Gyro_Gr + KpDef * AccGravity.x + GyroIntegError.x;   // 弧度制
+//     Gyro.y = gyroAccel->gyro.y * Gyro_Gr + KpDef * AccGravity.y + GyroIntegError.y;
+//     Gyro.z = gyroAccel->gyro.z * Gyro_Gr + KpDef * AccGravity.z + GyroIntegError.z;
+
+//     // 一阶龙格库塔法, 更新四元数
+//     q0_t = (-NumQ.q1 * Gyro.x - NumQ.q2 * Gyro.y - NumQ.q3 * Gyro.z) * HalfTime;
+//     q1_t = (NumQ.q0 * Gyro.x - NumQ.q3 * Gyro.y + NumQ.q2 * Gyro.z) * HalfTime;
+//     q2_t = (NumQ.q3 * Gyro.x + NumQ.q0 * Gyro.y - NumQ.q1 * Gyro.z) * HalfTime;
+//     q3_t = (-NumQ.q2 * Gyro.x + NumQ.q1 * Gyro.y + NumQ.q0 * Gyro.z) * HalfTime;
+
+//     NumQ.q0 += q0_t;
+//     NumQ.q1 += q1_t;
+//     NumQ.q2 += q2_t;
+//     NumQ.q3 += q3_t;
+
+//     // 四元数归一化
+//     NormQuat = Q_rsqrt(squa(NumQ.q0) + squa(NumQ.q1) + squa(NumQ.q2) + squa(NumQ.q3));
+//     NumQ.q0 *= NormQuat;
+//     NumQ.q1 *= NormQuat;
+//     NumQ.q2 *= NormQuat;
+//     NumQ.q3 *= NormQuat;
+
+//     /*机体坐标系下的Z方向向量*/
+//     float vecxZ = 2 * NumQ.q0 * NumQ.q2 - 2 * NumQ.q1 * NumQ.q3;     /*矩阵(3,1)项*/
+//     float vecyZ = 2 * NumQ.q2 * NumQ.q3 + 2 * NumQ.q0 * NumQ.q1;     /*矩阵(3,2)项*/
+//     float veczZ = 1 - 2 * NumQ.q1 * NumQ.q1 - 2 * NumQ.q2 * NumQ.q2; /*矩阵(3,3)项*/
+
+//     float yaw_G = gyroAccel->gyro.z * Gyro_G;   // 将Z轴角速度陀螺仪值 转换为Z角度/秒      Gyro_G陀螺仪初始化量程+-2000度每秒于1 / (65536 / 4000) = 0.03051756*2
+//     if((yaw_G > 0.5f) || (yaw_G < -0.5))           // 数据太小可以认为是干扰，不是偏航动作
+//     {
+//         eulerAngle->yaw += yaw_G * dt;   // 角速度积分成偏航角
+//     }
+
+//     eulerAngle->pitch = asin(vecxZ) * RtA;   // 俯仰角
+
+//     eulerAngle->roll = atan2f(vecyZ, veczZ) * RtA;   // 横滚角
+
+//     normAccz = gyroAccel->acc.x * vecxZ + gyroAccel->acc.y * vecyZ + gyroAccel->acc.z * veczZ; /*Z轴垂直方向上的加速度，此值涵盖了倾斜时在Z轴角速度的向量和，不是单纯重力感应得出的值*/
+// }
 
 /**
  * @description: 获取Z轴上的加速度 (如果已经倾斜,会考虑z轴上加速度的合成)
