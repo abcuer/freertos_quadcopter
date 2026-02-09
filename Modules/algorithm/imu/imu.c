@@ -39,137 +39,501 @@ static float Q_rsqrt(float number)
 
 static double normAccz; /* z轴上的加速度 */
 
+/* pitch、roll可用，yaw变化太慢，实际赚了90度，只变化了30度 */
 void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
-                                EulerAngle_Struct *eulerAngle,
-                                float dt)
+                                             EulerAngle_Struct *eulerAngle,
+                                             float dt)
 {
-    // BMI088灵敏度
     #define BMI088_GYRO_SENSITIVITY 16.384f
     #define BMI088_ACC_SENSITIVITY 8192.0f
-    #define DEG_TO_RAD 0.01745329251994329576f
     
-    static Quaternion_Struct q = {1, 0, 0, 0};
-    static float integralX = 0, integralY = 0, integralZ = 0;
-    static uint16_t times = 0;
+    static float gyro_roll = 0, gyro_pitch = 0, gyro_yaw = 0;
+    static float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+    static float yaw_drift_compensation = 0;  // Yaw漂移补偿值
+    static uint32_t stationary_samples = 0;
+    static float gz_history[10] = {0};  // 历史Gz值
+    static uint8_t gz_index = 0;
     
-    // 转换为物理值
+    // 转换物理值
     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
     float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
     
-    float gx = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
-    float gy = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
-    float gz = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    float gx_raw = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY;
+    float gy_raw = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY;
+    float gz_raw = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY;
     
-    // ============ 自适应参数 ============
-    float Kp, Ki;
-    float accMag = ax*ax + ay*ay + az*az;
+    // ============ 存储Gz历史值 ============
+    gz_history[gz_index] = gz_raw;
+    gz_index = (gz_index + 1) % 10;
     
-    // 初始化阶段（前2.4秒）
-    if (times < 400) {
-        times++;
-        Kp = 8.0f;      // 较大的Kp快速收敛
-        Ki = 0.002f;    // 较大的Ki快速消除初始误差
-    } else {
-        // 动态调整：根据加速度幅值
-        // 1.44 = 1.2^2, 0.64 = 0.8^2
-        if (accMag > 1.44f || accMag < 0.64f) {
-            // 剧烈运动：更信任陀螺仪
-            Kp = 3.6f;
-            Ki = 0.001f;
-        } else {
-            // 静止或缓慢运动：信任加速度计
-            Kp = 4.8f;
-            Ki = 0.0015f;
-        }
+    // ============ 零偏估计 ============
+    float acc_mag = sqrtf(ax*ax + ay*ay + az*az);
+    
+    // 计算Gz的平均值和方差
+    float gz_sum = 0, gz_sq_sum = 0;
+    for (int i = 0; i < 10; i++) {
+        gz_sum += gz_history[i];
+        gz_sq_sum += gz_history[i] * gz_history[i];
     }
+    float gz_mean = gz_sum / 10.0f;
+    float gz_variance = gz_sq_sum/10.0f - gz_mean*gz_mean;
     
-    // ============ Mahony算法核心 ============
-    if (accMag > 0.01f) {  // 加速度数据有效
-        float recipNorm = Q_rsqrt(accMag);
-        ax *= recipNorm;
-        ay *= recipNorm;
-        az *= recipNorm;
+    // 静止检测条件：
+    // 1. 加速度接近1g
+    // 2. 角速度小
+    // 3. Gz方差小（稳定性好）
+    int is_stationary = (fabsf(acc_mag - 1.0f) < 0.05f) &&
+                        (fabsf(gx_raw) < 0.3f) &&
+                        (fabsf(gy_raw) < 0.3f) &&
+                        (gz_variance < 0.01f);  // 方差小于0.01
+    
+    if (is_stationary) {
+        stationary_samples++;
         
-        // 计算重力方向误差
-        float vx = 2.0f * (q.q1 * q.q3 - q.q0 * q.q2);
-        float vy = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
-        float vz = q.q0 * q.q0 - q.q1 * q.q1 - q.q2 * q.q2 + q.q3 * q.q3;
+        // Roll/Pitch零偏（较快更新）
+        if (stationary_samples > 50) {
+            float alpha = 0.02f;
+            gyro_bias_x = (1.0f - alpha) * gyro_bias_x + alpha * gx_raw;
+            gyro_bias_y = (1.0f - alpha) * gyro_bias_y + alpha * gy_raw;
+        }
         
-        float ex = ay * vz - az * vy;
-        float ey = az * vx - ax * vz;
-        float ez = ax * vy - ay * vx;
-        
-        // 积分项
-        if (Ki > 0.0f) {
-            integralX += ex * dt;
-            integralY += ey * dt;
-            integralZ += ez * dt;
+        // Yaw零偏估计（需要长时间静止）
+        if (stationary_samples > 300) {  // 1.8秒
+            // 长时间静止下的Gz均值作为零偏
+            static float long_term_gz_sum = 0;
+            static uint32_t long_term_cnt = 0;
             
-            gx += Ki * integralX;
-            gy += Ki * integralY;
-            gz += Ki * integralZ;
+            long_term_gz_sum += gz_raw;
+            long_term_cnt++;
+            
+            if (long_term_cnt > 1000) {  // 6秒数据
+                gyro_bias_z = long_term_gz_sum / long_term_cnt;
+                long_term_gz_sum = 0;
+                long_term_cnt = 0;
+                
+                // 限制零偏范围
+                gyro_bias_z = fmaxf(fminf(gyro_bias_z, 0.1f), -0.1f);
+            }
         }
+    } else {
+        stationary_samples = 0;
+    }
+    
+    // ============ Yaw漂移补偿 ============
+    // 如果长时间小角度运动，可能是漂移
+    static float yaw_movement_sum = 0;
+    static uint32_t yaw_check_cnt = 0;
+    
+    if (fabsf(gz_raw - gyro_bias_z) < 0.1f) {  // 小角速度
+        yaw_movement_sum += (gz_raw - gyro_bias_z);
+        yaw_check_cnt++;
         
-        // 比例项
-        gx += Kp * ex;
-        gy += Kp * ey;
-        gz += Kp * ez;
-    }
-    
-    // 四元数更新
-    float qDot0 = 0.5f * (-q.q1 * gx - q.q2 * gy - q.q3 * gz);
-    float qDot1 = 0.5f * (q.q0 * gx + q.q2 * gz - q.q3 * gy);
-    float qDot2 = 0.5f * (q.q0 * gy - q.q1 * gz + q.q3 * gx);
-    float qDot3 = 0.5f * (q.q0 * gz + q.q1 * gy - q.q2 * gx);
-    
-    q.q0 += qDot0 * dt;
-    q.q1 += qDot1 * dt;
-    q.q2 += qDot2 * dt;
-    q.q3 += qDot3 * dt;
-    
-    // 归一化
-    float norm = Q_rsqrt(q.q0*q.q0 + q.q1*q.q1 + q.q2*q.q2 + q.q3*q.q3);
-    q.q0 *= norm;
-    q.q1 *= norm;
-    q.q2 *= norm;
-    q.q3 *= norm;
-    
-    // 计算欧拉角
-    float sinr_cosp = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
-    float cosr_cosp = 1.0f - 2.0f * (q.q1 * q.q1 + q.q2 * q.q2);
-    eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * 57.29578f;
-    
-    float sinp = 2.0f * (q.q0 * q.q2 - q.q3 * q.q1);
-    if (fabsf(sinp) >= 1.0f) {
-        eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * 57.29578f;
-    } else {
-        eulerAngle->pitch = asinf(sinp) * 57.29578f;
-    }
-    
-    // ============ 添加yaw解包裹 ============
-    static float unwrapped_yaw = 0;
-    static uint8_t first_run = 1;
-    
-    float current_yaw = atan2f(2.0f * (q.q0 * q.q3 + q.q1 * q.q2), 
-                               1.0f - 2.0f * (q.q2 * q.q2 + q.q3 * q.q3)) * 57.29578f;
-    
-    if (first_run) {
-        unwrapped_yaw = current_yaw;
-        first_run = 0;
-    } else {
-        float diff = current_yaw - unwrapped_yaw;
-        if (diff > 180.0f) {
-            unwrapped_yaw += diff - 360.0f;
-        } else if (diff < -180.0f) {
-            unwrapped_yaw += diff + 360.0f;
-        } else {
-            unwrapped_yaw = current_yaw;
+        if (yaw_check_cnt > 500) {  // 3秒
+            float avg_yaw_rate = yaw_movement_sum / yaw_check_cnt;
+            
+            // 如果平均角速度很小但有持续趋势，可能是漂移
+            if (fabsf(avg_yaw_rate) > 0.01f && fabsf(avg_yaw_rate) < 0.5f) {
+                yaw_drift_compensation -= avg_yaw_rate * 0.1f;  // 反向补偿
+            }
+            
+            yaw_movement_sum = 0;
+            yaw_check_cnt = 0;
         }
     }
     
-    eulerAngle->yaw = unwrapped_yaw;
+    // ============ 应用补偿 ============
+    float gx = gx_raw - gyro_bias_x;
+    float gy = gy_raw - gyro_bias_y;
+    float gz = gz_raw - gyro_bias_z + yaw_drift_compensation;
+    
+    // Gz死区和低通滤波
+    if (fabsf(gz) < 0.05f) gz = 0;  // 0.05°/s死区
+    
+    static float gz_lpf = 0;
+    gz_lpf = 0.6f * gz_lpf + 0.4f * gz;
+    
+    // ============ 积分 ============
+    gyro_roll += gy * dt;
+    gyro_pitch += gx * dt;
+    gyro_yaw += gz_lpf * dt;
+    
+    // ============ 加速度计角度 ============
+    float acc_roll = atan2f(ay, az) * 57.29578f;
+    float denom = sqrtf(ay*ay + az*az);
+    float acc_pitch = (denom > 0.01f) ? atan2f(-ax, denom) * 57.29578f : 0;
+    
+    // // ============ 自适应权重 ============
+    // float weight = (acc_mag > 1.2f || acc_mag < 0.8f) ? 0.8f : 0.98f;
+    float weight;
+    if (acc_mag > 1.2) {
+        // 快速运动或剧烈振动状态，减小加速度计权重
+        weight = 0.8f;
+    } else {
+        // 正常运动状态，强烈信任加速度计
+        weight = 0.98f;
+    }
+    // ============ 融合 ============
+    eulerAngle->roll = weight * acc_roll + (1.0f - weight) * gyro_roll;
+    eulerAngle->pitch = weight * acc_pitch + (1.0f - weight) * gyro_pitch;
+    
+    // Yaw特殊处理：限制积分速度
+    static float last_yaw = 0;
+    float yaw_diff = gyro_yaw - last_yaw;
+    
+    // 限制单次积分变化量
+    if (fabsf(yaw_diff) > 7.0f * dt) {  // 最大1°/s * dt
+        gyro_yaw = last_yaw + copysignf(7.0f * dt, yaw_diff);
+    }
+    
+    eulerAngle->yaw = gyro_yaw;
+    last_yaw = gyro_yaw;
+    
+    // 角度限制
+    if (eulerAngle->roll > 180.0f) eulerAngle->roll -= 360.0f;
+    if (eulerAngle->roll < -180.0f) eulerAngle->roll += 360.0f;
+    if (eulerAngle->pitch > 180.0f) eulerAngle->pitch -= 360.0f;
+    if (eulerAngle->pitch < -180.0f) eulerAngle->pitch += 360.0f;
+    if (eulerAngle->yaw > 180.0f) eulerAngle->yaw -= 360.0f;
+    if (eulerAngle->yaw < -180.0f) eulerAngle->yaw += 360.0f;
 }
+/* 稳定可用的pitch、roll，yaw变化太快，实际15度，显示一百多度但能稳定在某个值 */
+// void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
+//                              EulerAngle_Struct *eulerAngle,
+//                              float dt)
+// {
+//     #define BMI088_GYRO_SENSITIVITY 16.384f
+//     #define BMI088_ACC_SENSITIVITY 8192.0f
+    
+//     static float gyro_roll = 0, gyro_pitch = 0, gyro_yaw = 0;
+//     static float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+//     static uint32_t stationary_time = 0;
+//     static float last_gz_raw = 0;
+    
+//     // ============ 转换为物理值 ============
+//     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+//     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+//     float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+    
+//     float gx_raw = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY;
+//     float gy_raw = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY;
+//     float gz_raw = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY;
+    
+//     // ============ 改进的零偏估计 ============
+//     float acc_mag = sqrtf(ax*ax + ay*ay + az*az);
+    
+//     // 更严格的静止检测
+//     int is_stationary = (fabsf(acc_mag - 1.0f) < 0.05f) &&      // 加速度接近1g
+//                         (fabsf(gx_raw) < 0.5f) &&              // 角速度很小
+//                         (fabsf(gy_raw) < 0.5f) &&
+//                         (fabsf(gz_raw) < 0.5f);
+    
+//     if (is_stationary) {
+//         stationary_time++;
+        
+//         // Roll/Pitch零偏估计（较快）
+//         if (stationary_time > 50) {  // 0.3秒
+//             float alpha_rp = 0.01f;  // 较快的收敛速度
+//             gyro_bias_x = (1.0f - alpha_rp) * gyro_bias_x + alpha_rp * gx_raw;
+//             gyro_bias_y = (1.0f - alpha_rp) * gyro_bias_y + alpha_rp * gy_raw;
+            
+//             // 限制零偏范围
+//             gyro_bias_x = fmaxf(fminf(gyro_bias_x, 1.0f), -1.0f);
+//             gyro_bias_y = fmaxf(fminf(gyro_bias_y, 1.0f), -1.0f);
+//         }
+        
+//         // Yaw零偏估计（非常慢，需要长时间静止）
+//         if (stationary_time > 500) {  // 3秒完全静止
+//             float alpha_yaw = 0.0001f;  // 非常慢的收敛
+//             gyro_bias_z = (1.0f - alpha_yaw) * gyro_bias_z + alpha_yaw * gz_raw;
+//             gyro_bias_z = fmaxf(fminf(gyro_bias_z, 0.2f), -0.2f);  // 限制很小
+//         }
+//     } else {
+//         stationary_time = 0;
+//     }
+    
+//     // 应用零偏补偿
+//     float gx = gx_raw - gyro_bias_x;
+//     float gy = gy_raw - gyro_bias_y;
+//     float gz = gz_raw - gyro_bias_z;
+    
+//     // ============ Yaw特殊处理 ============
+//     // 1. 死区滤波（消除小信号噪声）
+//     float gz_filtered = gz;
+//     if (fabsf(gz_filtered) < 0.1f) {  // 0.1°/s死区
+//         gz_filtered = 0;
+//     }
+    
+//     // 2. 低通滤波减少噪声
+//     static float gz_lpf = 0;
+//     float lpf_alpha = 0.3f;  // 低通滤波系数
+//     gz_lpf = (1.0f - lpf_alpha) * gz_lpf + lpf_alpha * gz_filtered;
+    
+//     // 3. 积分
+//     gyro_yaw += gz_lpf * dt;
+    
+//     // ============ Roll/Pitch处理 ============
+//     gyro_roll += gy * dt;
+//     gyro_pitch += gx * dt;
+    
+//     // ============ 加速度计角度 ============
+//     float acc_roll = atan2f(ay, az) * 57.29578f;
+    
+//     float denom = sqrtf(ay*ay + az*az);
+//     float acc_pitch = (denom > 0.01f) ? atan2f(-ax, denom) * 57.29578f : 0;
+    
+//     // ============ 自适应权重 ============
+//     float weight;
+//     if (acc_mag > 1.2f || acc_mag < 0.8f) {
+//         weight = 0.2f;  // 运动状态
+//     } else {
+//         weight = 0.98f; // 静止状态
+//     }
+    
+//     // ============ 融合 ============
+//     eulerAngle->roll = weight * acc_roll + (1.0f - weight) * gyro_roll;
+//     eulerAngle->pitch = weight * acc_pitch + (1.0f - weight) * gyro_pitch;
+//     eulerAngle->yaw = gyro_yaw;
+    
+//     // ============ 角度限制 ============
+//     // Roll/Pitch限制
+//     if (eulerAngle->roll > 180.0f) eulerAngle->roll -= 360.0f;
+//     if (eulerAngle->roll < -180.0f) eulerAngle->roll += 360.0f;
+//     if (eulerAngle->pitch > 180.0f) eulerAngle->pitch -= 360.0f;
+//     if (eulerAngle->pitch < -180.0f) eulerAngle->pitch += 360.0f;
+    
+//     // Yaw限制和修正
+//     if (eulerAngle->yaw > 180.0f) eulerAngle->yaw -= 360.0f;
+//     if (eulerAngle->yaw < -180.0f) eulerAngle->yaw += 360.0f;
+// }
+
+/* 稳定可用的pitch和roll，yaw变化太快 */
+// void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
+//                         EulerAngle_Struct *eulerAngle,
+//                                             float dt)
+// {
+//     #define BMI088_GYRO_SENSITIVITY 16.384f
+//     #define BMI088_ACC_SENSITIVITY 8192.0f
+    
+//     // 静态变量保持状态
+//     static float gyro_roll = 0, gyro_pitch = 0, gyro_yaw = 0;
+//     static float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+//     static uint32_t stationary_time = 0;
+    
+//     // 转换为物理值
+//     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+//     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+//     float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+    
+//     float gx_raw = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY;  // °/s
+//     float gy_raw = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY;
+//     float gz_raw = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY;
+    
+//     // ============ 零偏估计 ============
+//     float acc_mag = sqrtf(ax*ax + ay*ay + az*az);
+//     float gyro_mag = sqrtf(gx_raw*gx_raw + gy_raw*gy_raw);
+    
+//     // 静止检测
+//     if (fabsf(acc_mag - 1.0f) < 0.1f && gyro_mag < 1.0f) {
+//         stationary_time++;
+//         if (stationary_time > 100) {  // 0.6秒
+//             float alpha = 0.0005f;
+//             gyro_bias_x = (1.0f - alpha) * gyro_bias_x + alpha * gx_raw;
+//             gyro_bias_y = (1.0f - alpha) * gyro_bias_y + alpha * gy_raw;
+//             gyro_bias_z = (1.0f - alpha) * gyro_bias_z + alpha * gz_raw;
+//         }
+//     } else {
+//         stationary_time = 0;
+//     }
+    
+//     // 应用零偏补偿
+//     float gx = gx_raw - gyro_bias_x;
+//     float gy = gy_raw - gyro_bias_y;
+//     float gz = gz_raw - gyro_bias_z;
+    
+//     // ============ 陀螺仪积分 ============
+//     // 注意轴对应关系：
+//     // - Roll (绕X轴旋转) 对应 Gy (Y轴角速度)
+//     // - Pitch (绕Y轴旋转) 对应 Gx (X轴角速度)  
+//     // - Yaw (绕Z轴旋转) 对应 Gz (Z轴角速度)
+//     gyro_roll += gy * dt;
+//     gyro_pitch += gx * dt;  // 注意这里！Gx对应pitch
+//     gyro_yaw += gz * dt;
+    
+//     // ============ 加速度计计算角度 ============
+//     float acc_roll, acc_pitch;
+    
+//     // Roll: atan2(Ay, Az)
+//     acc_roll = atan2f(ay, az) * 57.29578f;
+    
+//     // Pitch: atan2(-Ax, sqrt(Ay² + Az²))
+//     float denom = sqrtf(ay*ay + az*az);
+//     if (denom > 0.01f) {
+//         acc_pitch = atan2f(-ax, denom) * 57.29578f;
+//     } else {
+//         acc_pitch = 0;  // 避免除零
+//     }
+    
+//     // ============ 自适应权重 ============
+//     float weight;
+//     if (acc_mag > 1.2f || acc_mag < 0.8f) {
+//         // 剧烈运动：信任陀螺仪
+//         weight = 0.2f;  // 更小的权重给加速度计
+//     } else {
+//         // 正常状态：信任加速度计
+//         weight = 0.98f;
+//     }
+    
+//     // ============ 互补滤波融合 ============
+//     eulerAngle->roll = weight * acc_roll + (1.0f - weight) * gyro_roll;
+//     eulerAngle->pitch = weight * acc_pitch + (1.0f - weight) * gyro_pitch;
+    
+//     // ============ 偏航角处理 ============
+//     // 简单积分，但添加死区减少噪声影响
+//     if (fabsf(gz) > 0.5f) {  // 0.5°/s死区
+//         eulerAngle->yaw = gyro_yaw;
+//     }
+//     // 限制角度范围
+//     if (eulerAngle->roll > 180.0f) eulerAngle->roll -= 360.0f;
+//     if (eulerAngle->roll < -180.0f) eulerAngle->roll += 360.0f;
+//     if (eulerAngle->pitch > 180.0f) eulerAngle->pitch -= 360.0f;
+//     if (eulerAngle->pitch < -180.0f) eulerAngle->pitch += 360.0f;
+//     if (eulerAngle->yaw > 180.0f) eulerAngle->yaw -= 360.0f;
+//     if (eulerAngle->yaw < -180.0f) eulerAngle->yaw += 360.0f;
+// }
+
+/* 较好的数据解算 */
+// void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
+//                                 EulerAngle_Struct *eulerAngle,
+//                                 float dt)
+// {
+//     // BMI088灵敏度
+//     #define BMI088_GYRO_SENSITIVITY 16.384f
+//     #define BMI088_ACC_SENSITIVITY 8192.0f
+//     #define DEG_TO_RAD 0.01745329251994329576f
+    
+//     static Quaternion_Struct q = {1, 0, 0, 0};
+//     static float integralX = 0, integralY = 0, integralZ = 0;
+//     static uint16_t times = 0;
+    
+//     // 转换为物理值
+//     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+//     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+//     float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+    
+//     float gx = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+//     float gy = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+//     float gz = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    
+//     // ============ 自适应参数 ============
+//     float Kp, Ki;
+//     float accMag = ax*ax + ay*ay + az*az;
+    
+//     // 初始化阶段（前2.4秒）
+//     if (times < 400) {
+//         times++;
+//         Kp = 8.0f;      // 较大的Kp快速收敛
+//         Ki = 0.002f;    // 较大的Ki快速消除初始误差
+//     } else {
+//         // 动态调整：根据加速度幅值
+//         // 1.44 = 1.2^2, 0.64 = 0.8^2
+//         if (accMag > 1.44f || accMag < 0.64f) {
+//             // 剧烈运动：更信任陀螺仪
+//             Kp = 3.6f;
+//             Ki = 0.001f;
+//         } else {
+//             // 静止或缓慢运动：信任加速度计
+//             Kp = 4.8f;
+//             Ki = 0.0015f;
+//         }
+//     }
+    
+//     // ============ Mahony算法核心 ============
+//     if (accMag > 0.01f) {  // 加速度数据有效
+//         float recipNorm = Q_rsqrt(accMag);
+//         ax *= recipNorm;
+//         ay *= recipNorm;
+//         az *= recipNorm;
+        
+//         // 计算重力方向误差
+//         float vx = 2.0f * (q.q1 * q.q3 - q.q0 * q.q2);
+//         float vy = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
+//         float vz = q.q0 * q.q0 - q.q1 * q.q1 - q.q2 * q.q2 + q.q3 * q.q3;
+        
+//         float ex = ay * vz - az * vy;
+//         float ey = az * vx - ax * vz;
+//         float ez = ax * vy - ay * vx;
+        
+//         // 积分项
+//         if (Ki > 0.0f) {
+//             integralX += ex * dt;
+//             integralY += ey * dt;
+//             integralZ += ez * dt;
+            
+//             gx += Ki * integralX;
+//             gy += Ki * integralY;
+//             gz += Ki * integralZ;
+//         }
+        
+//         // 比例项
+//         gx += Kp * ex;
+//         gy += Kp * ey;
+//         gz += Kp * ez;
+//     }
+    
+//     // 四元数更新
+//     float qDot0 = 0.5f * (-q.q1 * gx - q.q2 * gy - q.q3 * gz);
+//     float qDot1 = 0.5f * (q.q0 * gx + q.q2 * gz - q.q3 * gy);
+//     float qDot2 = 0.5f * (q.q0 * gy - q.q1 * gz + q.q3 * gx);
+//     float qDot3 = 0.5f * (q.q0 * gz + q.q1 * gy - q.q2 * gx);
+    
+//     q.q0 += qDot0 * dt;
+//     q.q1 += qDot1 * dt;
+//     q.q2 += qDot2 * dt;
+//     q.q3 += qDot3 * dt;
+    
+//     // 归一化
+//     float norm = Q_rsqrt(q.q0*q.q0 + q.q1*q.q1 + q.q2*q.q2 + q.q3*q.q3);
+//     q.q0 *= norm;
+//     q.q1 *= norm;
+//     q.q2 *= norm;
+//     q.q3 *= norm;
+    
+//     // 计算欧拉角
+//     float sinr_cosp = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
+//     float cosr_cosp = 1.0f - 2.0f * (q.q1 * q.q1 + q.q2 * q.q2);
+//     eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * 57.29578f;
+    
+//     float sinp = 2.0f * (q.q0 * q.q2 - q.q3 * q.q1);
+//     if (fabsf(sinp) >= 1.0f) {
+//         eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * 57.29578f;
+//     } else {
+//         eulerAngle->pitch = asinf(sinp) * 57.29578f;
+//     }
+    
+//     // ============ 添加yaw解包裹 ============
+//     static float unwrapped_yaw = 0;
+//     static uint8_t first_run = 1;
+    
+//     float current_yaw = atan2f(2.0f * (q.q0 * q.q3 + q.q1 * q.q2), 
+//                                1.0f - 2.0f * (q.q2 * q.q2 + q.q3 * q.q3)) * 57.29578f;
+    
+//     if (first_run) {
+//         unwrapped_yaw = current_yaw;
+//         first_run = 0;
+//     } else {
+//         float diff = current_yaw - unwrapped_yaw;
+//         if (diff > 180.0f) {
+//             unwrapped_yaw += diff - 360.0f;
+//         } else if (diff < -180.0f) {
+//             unwrapped_yaw += diff + 360.0f;
+//         } else {
+//             unwrapped_yaw = current_yaw;
+//         }
+//     }
+    
+//     eulerAngle->yaw = unwrapped_yaw;
+// }
 
 /**
  * @brief 改进的Mahony算法，带自适应零偏补偿
