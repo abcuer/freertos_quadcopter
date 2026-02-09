@@ -39,6 +39,138 @@ static float Q_rsqrt(float number)
 
 static double normAccz; /* z轴上的加速度 */
 
+void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
+                                EulerAngle_Struct *eulerAngle,
+                                float dt)
+{
+    // BMI088灵敏度
+    #define BMI088_GYRO_SENSITIVITY 16.384f
+    #define BMI088_ACC_SENSITIVITY 8192.0f
+    #define DEG_TO_RAD 0.01745329251994329576f
+    
+    static Quaternion_Struct q = {1, 0, 0, 0};
+    static float integralX = 0, integralY = 0, integralZ = 0;
+    static uint16_t times = 0;
+    
+    // 转换为物理值
+    float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+    float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+    float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+    
+    float gx = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    float gy = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    float gz = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+    
+    // ============ 自适应参数 ============
+    float Kp, Ki;
+    float accMag = ax*ax + ay*ay + az*az;
+    
+    // 初始化阶段（前2.4秒）
+    if (times < 400) {
+        times++;
+        Kp = 8.0f;      // 较大的Kp快速收敛
+        Ki = 0.002f;    // 较大的Ki快速消除初始误差
+    } else {
+        // 动态调整：根据加速度幅值
+        // 1.44 = 1.2^2, 0.64 = 0.8^2
+        if (accMag > 1.44f || accMag < 0.64f) {
+            // 剧烈运动：更信任陀螺仪
+            Kp = 3.6f;
+            Ki = 0.001f;
+        } else {
+            // 静止或缓慢运动：信任加速度计
+            Kp = 4.8f;
+            Ki = 0.0015f;
+        }
+    }
+    
+    // ============ Mahony算法核心 ============
+    if (accMag > 0.01f) {  // 加速度数据有效
+        float recipNorm = Q_rsqrt(accMag);
+        ax *= recipNorm;
+        ay *= recipNorm;
+        az *= recipNorm;
+        
+        // 计算重力方向误差
+        float vx = 2.0f * (q.q1 * q.q3 - q.q0 * q.q2);
+        float vy = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
+        float vz = q.q0 * q.q0 - q.q1 * q.q1 - q.q2 * q.q2 + q.q3 * q.q3;
+        
+        float ex = ay * vz - az * vy;
+        float ey = az * vx - ax * vz;
+        float ez = ax * vy - ay * vx;
+        
+        // 积分项
+        if (Ki > 0.0f) {
+            integralX += ex * dt;
+            integralY += ey * dt;
+            integralZ += ez * dt;
+            
+            gx += Ki * integralX;
+            gy += Ki * integralY;
+            gz += Ki * integralZ;
+        }
+        
+        // 比例项
+        gx += Kp * ex;
+        gy += Kp * ey;
+        gz += Kp * ez;
+    }
+    
+    // 四元数更新
+    float qDot0 = 0.5f * (-q.q1 * gx - q.q2 * gy - q.q3 * gz);
+    float qDot1 = 0.5f * (q.q0 * gx + q.q2 * gz - q.q3 * gy);
+    float qDot2 = 0.5f * (q.q0 * gy - q.q1 * gz + q.q3 * gx);
+    float qDot3 = 0.5f * (q.q0 * gz + q.q1 * gy - q.q2 * gx);
+    
+    q.q0 += qDot0 * dt;
+    q.q1 += qDot1 * dt;
+    q.q2 += qDot2 * dt;
+    q.q3 += qDot3 * dt;
+    
+    // 归一化
+    float norm = Q_rsqrt(q.q0*q.q0 + q.q1*q.q1 + q.q2*q.q2 + q.q3*q.q3);
+    q.q0 *= norm;
+    q.q1 *= norm;
+    q.q2 *= norm;
+    q.q3 *= norm;
+    
+    // 计算欧拉角
+    float sinr_cosp = 2.0f * (q.q0 * q.q1 + q.q2 * q.q3);
+    float cosr_cosp = 1.0f - 2.0f * (q.q1 * q.q1 + q.q2 * q.q2);
+    eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * 57.29578f;
+    
+    float sinp = 2.0f * (q.q0 * q.q2 - q.q3 * q.q1);
+    if (fabsf(sinp) >= 1.0f) {
+        eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * 57.29578f;
+    } else {
+        eulerAngle->pitch = asinf(sinp) * 57.29578f;
+    }
+    
+    // ============ 添加yaw解包裹 ============
+    static float unwrapped_yaw = 0;
+    static uint8_t first_run = 1;
+    
+    float current_yaw = atan2f(2.0f * (q.q0 * q.q3 + q.q1 * q.q2), 
+                               1.0f - 2.0f * (q.q2 * q.q2 + q.q3 * q.q3)) * 57.29578f;
+    
+    if (first_run) {
+        unwrapped_yaw = current_yaw;
+        first_run = 0;
+    } else {
+        float diff = current_yaw - unwrapped_yaw;
+        if (diff > 180.0f) {
+            unwrapped_yaw += diff - 360.0f;
+        } else if (diff < -180.0f) {
+            unwrapped_yaw += diff + 360.0f;
+        } else {
+            unwrapped_yaw = current_yaw;
+        }
+    }
+    
+    eulerAngle->yaw = unwrapped_yaw;
+}
+
 /**
  * @brief 改进的Mahony算法，带自适应零偏补偿
  */
@@ -174,114 +306,114 @@ static double normAccz; /* z轴上的加速度 */
  * @brief 修改后的欧拉角解算函数，适配BMI088
  */
 
-void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
-                              EulerAngle_Struct *eulerAngle,
-                              float dt)
-{
-    // BMI088灵敏度定义
-    #define BMI088_GYRO_SENSITIVITY 16.384f  // LSB/(°/s)
-    #define BMI088_ACC_SENSITIVITY  8192.0f  // LSB/g
-    #define DEG_TO_RAD 0.01745329251994329576f
+// void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
+//                               EulerAngle_Struct *eulerAngle,
+//                               float dt)
+// {
+//     // BMI088灵敏度定义
+//     #define BMI088_GYRO_SENSITIVITY 16.384f  // LSB/(°/s)
+//     #define BMI088_ACC_SENSITIVITY  8192.0f  // LSB/g
+//     #define DEG_TO_RAD 0.01745329251994329576f
     
-    volatile struct V
-    {
-        float x;
-        float y;
-        float z;
-    } Gravity, Acc, Gyro, AccGravity;
+//     volatile struct V
+//     {
+//         float x;
+//         float y;
+//         float z;
+//     } Gravity, Acc, Gyro, AccGravity;
 
-    static struct V          GyroIntegError = {0};
-    static float             KpDef          = 0.8f;
-    static float             KiDef          = 0.0003f;
-    static Quaternion_Struct NumQ           = {1, 0, 0, 0};
-    float                    q0_t, q1_t, q2_t, q3_t;
-    float NormQuat;
-    float HalfTime = dt * 0.5f;
+//     static struct V          GyroIntegError = {0};
+//     static float             KpDef          = 0.8f;
+//     static float             KiDef          = 0.0003f;
+//     static Quaternion_Struct NumQ           = {1, 0, 0, 0};
+//     float                    q0_t, q1_t, q2_t, q3_t;
+//     float NormQuat;
+//     float HalfTime = dt * 0.5f;
 
-    // ============ 关键修改：单位转换 ============
-    // 1. 将加速度原始值转换为g单位
-    float acc_x_g = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
-    float acc_y_g = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
-    float acc_z_g = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
+//     // ============ 关键修改：单位转换 ============
+//     // 1. 将加速度原始值转换为g单位
+//     float acc_x_g = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
+//     float acc_y_g = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
+//     float acc_z_g = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
     
-    // 2. 将陀螺仪原始值转换为弧度/秒
-    float gyro_x_rad = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
-    float gyro_y_rad = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
-    float gyro_z_rad = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
-    // ===========================================
+//     // 2. 将陀螺仪原始值转换为弧度/秒
+//     float gyro_x_rad = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+//     float gyro_y_rad = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+//     float gyro_z_rad = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY * DEG_TO_RAD;
+//     // ===========================================
 
-    // 提取等效旋转矩阵中的重力分量
-    Gravity.x = 2 * (NumQ.q1 * NumQ.q3 - NumQ.q0 * NumQ.q2);
-    Gravity.y = 2 * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
-    Gravity.z = 1 - 2 * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
+//     // 提取等效旋转矩阵中的重力分量
+//     Gravity.x = 2 * (NumQ.q1 * NumQ.q3 - NumQ.q0 * NumQ.q2);
+//     Gravity.y = 2 * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
+//     Gravity.z = 1 - 2 * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
     
-    // 加速度归一化（使用物理值g）
-    NormQuat = Q_rsqrt(acc_x_g * acc_x_g + acc_y_g * acc_y_g + acc_z_g * acc_z_g);
+//     // 加速度归一化（使用物理值g）
+//     NormQuat = Q_rsqrt(acc_x_g * acc_x_g + acc_y_g * acc_y_g + acc_z_g * acc_z_g);
 
-    Acc.x = acc_x_g * NormQuat;
-    Acc.y = acc_y_g * NormQuat;
-    Acc.z = acc_z_g * NormQuat;
+//     Acc.x = acc_x_g * NormQuat;
+//     Acc.y = acc_y_g * NormQuat;
+//     Acc.z = acc_z_g * NormQuat;
     
-    // 向量差乘得出的值
-    AccGravity.x = (Acc.y * Gravity.z - Acc.z * Gravity.y);
-    AccGravity.y = (Acc.z * Gravity.x - Acc.x * Gravity.z);
-    AccGravity.z = (Acc.x * Gravity.y - Acc.y * Gravity.x);
+//     // 向量差乘得出的值
+//     AccGravity.x = (Acc.y * Gravity.z - Acc.z * Gravity.y);
+//     AccGravity.y = (Acc.z * Gravity.x - Acc.x * Gravity.z);
+//     AccGravity.z = (Acc.x * Gravity.y - Acc.y * Gravity.x);
     
-    // 再做加速度积分补偿角速度的补偿值
-    GyroIntegError.x += AccGravity.x * KiDef;
-    GyroIntegError.y += AccGravity.y * KiDef;
-    GyroIntegError.z += AccGravity.z * KiDef;
+//     // 再做加速度积分补偿角速度的补偿值
+//     GyroIntegError.x += AccGravity.x * KiDef;
+//     GyroIntegError.y += AccGravity.y * KiDef;
+//     GyroIntegError.z += AccGravity.z * KiDef;
     
-    // 角速度融合加速度积分补偿值（使用弧度/秒）
-    Gyro.x = gyro_x_rad + KpDef * AccGravity.x + GyroIntegError.x;
-    Gyro.y = gyro_y_rad + KpDef * AccGravity.y + GyroIntegError.y;
-    Gyro.z = gyro_z_rad + KpDef * AccGravity.z + GyroIntegError.z;
+//     // 角速度融合加速度积分补偿值（使用弧度/秒）
+//     Gyro.x = gyro_x_rad + KpDef * AccGravity.x + GyroIntegError.x;
+//     Gyro.y = gyro_y_rad + KpDef * AccGravity.y + GyroIntegError.y;
+//     Gyro.z = gyro_z_rad + KpDef * AccGravity.z + GyroIntegError.z;
 
-    // 一阶龙格库塔法, 更新四元数
-    q0_t = (-NumQ.q1 * Gyro.x - NumQ.q2 * Gyro.y - NumQ.q3 * Gyro.z) * HalfTime;
-    q1_t = (NumQ.q0 * Gyro.x - NumQ.q3 * Gyro.y + NumQ.q2 * Gyro.z) * HalfTime;
-    q2_t = (NumQ.q3 * Gyro.x + NumQ.q0 * Gyro.y - NumQ.q1 * Gyro.z) * HalfTime;
-    q3_t = (-NumQ.q2 * Gyro.x + NumQ.q1 * Gyro.y + NumQ.q0 * Gyro.z) * HalfTime;
+//     // 一阶龙格库塔法, 更新四元数
+//     q0_t = (-NumQ.q1 * Gyro.x - NumQ.q2 * Gyro.y - NumQ.q3 * Gyro.z) * HalfTime;
+//     q1_t = (NumQ.q0 * Gyro.x - NumQ.q3 * Gyro.y + NumQ.q2 * Gyro.z) * HalfTime;
+//     q2_t = (NumQ.q3 * Gyro.x + NumQ.q0 * Gyro.y - NumQ.q1 * Gyro.z) * HalfTime;
+//     q3_t = (-NumQ.q2 * Gyro.x + NumQ.q1 * Gyro.y + NumQ.q0 * Gyro.z) * HalfTime;
 
-    NumQ.q0 += q0_t;
-    NumQ.q1 += q1_t;
-    NumQ.q2 += q2_t;
-    NumQ.q3 += q3_t;
+//     NumQ.q0 += q0_t;
+//     NumQ.q1 += q1_t;
+//     NumQ.q2 += q2_t;
+//     NumQ.q3 += q3_t;
 
-    // 四元数归一化
-    NormQuat = Q_rsqrt(squa(NumQ.q0) + squa(NumQ.q1) + squa(NumQ.q2) + squa(NumQ.q3));
-    NumQ.q0 *= NormQuat;
-    NumQ.q1 *= NormQuat;
-    NumQ.q2 *= NormQuat;
-    NumQ.q3 *= NormQuat;
+//     // 四元数归一化
+//     NormQuat = Q_rsqrt(squa(NumQ.q0) + squa(NumQ.q1) + squa(NumQ.q2) + squa(NumQ.q3));
+//     NumQ.q0 *= NormQuat;
+//     NumQ.q1 *= NormQuat;
+//     NumQ.q2 *= NormQuat;
+//     NumQ.q3 *= NormQuat;
 
-    /*机体坐标系下的Z方向向量*/
-    float vecxZ = 2 * NumQ.q0 * NumQ.q2 - 2 * NumQ.q1 * NumQ.q3;
-    float vecyZ = 2 * NumQ.q2 * NumQ.q3 + 2 * NumQ.q0 * NumQ.q1;
-    float veczZ = 1 - 2 * NumQ.q1 * NumQ.q1 - 2 * NumQ.q2 * NumQ.q2;
+//     /*机体坐标系下的Z方向向量*/
+//     float vecxZ = 2 * NumQ.q0 * NumQ.q2 - 2 * NumQ.q1 * NumQ.q3;
+//     float vecyZ = 2 * NumQ.q2 * NumQ.q3 + 2 * NumQ.q0 * NumQ.q1;
+//     float veczZ = 1 - 2 * NumQ.q1 * NumQ.q1 - 2 * NumQ.q2 * NumQ.q2;
 
-    // ============ 修正偏航角计算 ============
-    // 使用Mahony算法计算的偏航角，而不是单独积分
-    // 从四元数计算所有三个欧拉角
-    float sinr_cosp = 2.0f * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
-    float cosr_cosp = 1.0f - 2.0f * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
-    eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * RtA;
+//     // ============ 修正偏航角计算 ============
+//     // 使用Mahony算法计算的偏航角，而不是单独积分
+//     // 从四元数计算所有三个欧拉角
+//     float sinr_cosp = 2.0f * (NumQ.q0 * NumQ.q1 + NumQ.q2 * NumQ.q3);
+//     float cosr_cosp = 1.0f - 2.0f * (NumQ.q1 * NumQ.q1 + NumQ.q2 * NumQ.q2);
+//     eulerAngle->roll = atan2f(sinr_cosp, cosr_cosp) * RtA;
 
-    float sinp = 2.0f * (NumQ.q0 * NumQ.q2 - NumQ.q3 * NumQ.q1);
-    if (fabsf(sinp) >= 1.0f) {
-        eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * RtA;
-    } else {
-        eulerAngle->pitch = asinf(sinp) * RtA;
-    }
+//     float sinp = 2.0f * (NumQ.q0 * NumQ.q2 - NumQ.q3 * NumQ.q1);
+//     if (fabsf(sinp) >= 1.0f) {
+//         eulerAngle->pitch = copysignf(3.14159265358979323846f / 2.0f, sinp) * RtA;
+//     } else {
+//         eulerAngle->pitch = asinf(sinp) * RtA;
+//     }
 
-    float siny_cosp = 2.0f * (NumQ.q0 * NumQ.q3 + NumQ.q1 * NumQ.q2);
-    float cosy_cosp = 1.0f - 2.0f * (NumQ.q2 * NumQ.q2 + NumQ.q3 * NumQ.q3);
-    eulerAngle->yaw = atan2f(siny_cosp, cosy_cosp) * RtA;
+//     float siny_cosp = 2.0f * (NumQ.q0 * NumQ.q3 + NumQ.q1 * NumQ.q2);
+//     float cosy_cosp = 1.0f - 2.0f * (NumQ.q2 * NumQ.q2 + NumQ.q3 * NumQ.q3);
+//     eulerAngle->yaw = atan2f(siny_cosp, cosy_cosp) * RtA;
 
-    // 计算Z轴加速度（可选）
-    static float normAccz;
-    normAccz = acc_x_g * vecxZ + acc_y_g * vecyZ + acc_z_g * veczZ;
-}
+//     // 计算Z轴加速度（可选）
+//     static float normAccz;
+//     normAccz = acc_x_g * vecxZ + acc_y_g * vecyZ + acc_z_g * veczZ;
+// }
 
 /**
  * @description: 根据mpu的6轴数据, 获取表征姿态的欧拉角
