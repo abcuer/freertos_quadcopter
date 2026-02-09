@@ -1,5 +1,6 @@
 #include "nrf24l01.h"
 #include "led.h"
+#include "bsp_delay.h"
 
 /* 信号强度与错误统计变量 */
 uint16_t Nrf_Erro = 0;
@@ -41,7 +42,7 @@ static uint8_t NRF24L01_Read_Reg(uint8_t regaddr)
 	uint8_t reg_val;	    
 	Clr_NRF24L01_CSN;                //Ê¹ÄÜSPI´«Êä		
   	SPI_Transmit_One_Byte(regaddr);     //·¢ËÍ¼Ä´æÆ÷ºÅ
-  	reg_val=SPI_Transmit_One_Byte(0XFF);//¶ÁÈ¡¼Ä´æÆ÷ÄÚÈÝ
+  	reg_val = SPI_Transmit_One_Byte(0XFF);//¶ÁÈ¡¼Ä´æÆ÷ÄÚÈÝ
   	Set_NRF24L01_CSN;                //½ûÖ¹SPI´«Êä		    
   	return(reg_val);                 //·µ»Ø×´Ì¬Öµ
 }	
@@ -52,16 +53,12 @@ static uint8_t NRF24L01_Read_Reg(uint8_t regaddr)
 //·µ»ØÖµ,´Ë´Î¶Áµ½µÄ×´Ì¬¼Ä´æÆ÷Öµ 
 static uint8_t NRF24L01_Read_Buf(uint8_t regaddr,uint8_t *pBuf,uint8_t datalen)
 {
-		uint8_t status,uint8_t_ctr;	
-	
+	uint8_t status,uint8_t_ctr;	
   	Clr_NRF24L01_CSN;                     //Ê¹ÄÜSPI´«Êä
-	
   	status = SPI_Transmit_One_Byte(regaddr);   //·¢ËÍ¼Ä´æÆ÷Öµ(Î»ÖÃ),²¢¶ÁÈ¡×´Ì¬Öµ  
-	
-		for(uint8_t_ctr=0;uint8_t_ctr<datalen;uint8_t_ctr++) pBuf[uint8_t_ctr]=SPI_Transmit_One_Byte(0XFF);//¶Á³öÊý¾Ý
-	
+	for(uint8_t_ctr=0;uint8_t_ctr<datalen;uint8_t_ctr++) 
+        pBuf[uint8_t_ctr]=SPI_Transmit_One_Byte(0XFF);//¶Á³öÊý¾Ý
   	Set_NRF24L01_CSN;                     //¹Ø±ÕSPI´«Êä
-	
   	return status;                        //·µ»Ø¶Áµ½µÄ×´Ì¬Öµ
 }
 
@@ -210,7 +207,7 @@ void NRF24L01_init(void)
 
     do {
         ANO_NRF_Init(MODEL_RX2, 40);
-        HAL_Delay(5);          // 给硬件一点喘息时间，增加成功率
+        delay_ms(5);          // 给硬件一点喘息时间，增加成功率
         status = NRF24L01_Check();
         i++;
         
