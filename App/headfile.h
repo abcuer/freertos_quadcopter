@@ -24,6 +24,7 @@
 /***************** App ****************/
 #include "control.h"
 #include "utils.h"
+#include "remote.h"
 #include "scheduler.h"
 
 /************************ 标志位 *********************/

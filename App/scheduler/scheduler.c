@@ -90,8 +90,7 @@ void Duty_2ms()
 void Duty_6ms()
 {
     time[1] = GetSysTime_us();
-
-	IMU_Get_Gyro_Acc(&gyro_acc);
-	IMU_GetEulerAngle(&gyro_acc, &euler_angle, 0.006f);
+	// IMU_Get_Gyro_Acc(&gyro_acc);
+	// IMU_GetEulerAngle(&gyro_acc, &euler_angle, 0.006f);
     time[1] = GetSysTime_us() - time[1];
 }

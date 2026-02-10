@@ -20,7 +20,9 @@
 #include "main.h"
 #include "control.h"
 #include "led.h"
+#include "motor.h"
 #include "spi.h"
+#include "stm32f1xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -104,9 +106,26 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
+    // SetMotorPWM(1090, 1090, 1090, 1090);
+    if(Remote_Parse_Task()==0)
+    {
+        SetMotorPWM(flight_rc_data.THR, flight_rc_data.THR, flight_rc_data.THR, flight_rc_data.THR);
+        SetLedMode(bLEDL, LED_TOGGLE);     // 连接成功，蓝红双闪
+        SetLedMode(bLEDR, LED_TOGGLE);
+        SetLedMode(rLEDL, LED_TOGGLE);
+        SetLedMode(rLEDR, LED_TOGGLE);
+    }
+    else 
+    { 
+        MotorLock(); 
+        SetLedMode(bLEDL, LED_OFF);        // 连接失败，红灯闪
+        SetLedMode(bLEDR, LED_OFF);
+        SetLedMode(rLEDL, LED_TOGGLE);
+        SetLedMode(rLEDR, LED_TOGGLE);
+    }
+    HAL_Delay(100);
     // BMI088_Read(&gyro_acc);
-    main_loop();
+    // main_loop();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

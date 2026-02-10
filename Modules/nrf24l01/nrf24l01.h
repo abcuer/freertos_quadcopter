@@ -2,19 +2,22 @@
 #define __NRF24L01_H
 
 #include "spi.h"
+#include "remote.h"
 
-/* GPIO控制宏重构 */
-#define Set_NRF24L01_CSN    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET)
-#define Clr_NRF24L01_CSN    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET)
-#define Set_NRF24L01_CE     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET)
-#define Clr_NRF24L01_CE     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET)
-#define READ_NRF24L01_IRQ   HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_2)
+#define CONNECT_CHANNAL     88
 
 // NRF24L01发送接收数据宽度定义
 #define TX_ADR_WIDTH    5                               // 5字节的地址宽度
 #define RX_ADR_WIDTH    5                               // 5字节的地址宽度
-#define TX_PLOAD_WIDTH  32                              // 32字节的用户数据宽度
-#define RX_PLOAD_WIDTH  32                              // 32字节的用户数据宽度
+#define TX_PLOAD_WIDTH  sizeof(RC_Frame_Struct)         // 用户数据宽度
+#define RX_PLOAD_WIDTH  sizeof(RC_Frame_Struct)         // 用户数据宽度
+
+/* GPIO控制宏重构 */
+#define Set_NRF24L01_CSN    HAL_GPIO_WritePin(GPIOB, NRF_CSN_Pin, GPIO_PIN_SET)
+#define Clr_NRF24L01_CSN    HAL_GPIO_WritePin(GPIOB, NRF_CSN_Pin, GPIO_PIN_RESET)
+#define Set_NRF24L01_CE     HAL_GPIO_WritePin(GPIOA, NRF_CE_Pin, GPIO_PIN_SET)
+#define Clr_NRF24L01_CE     HAL_GPIO_WritePin(GPIOA, NRF_CE_Pin, GPIO_PIN_RESET)
+// #define READ_NRF24L01_IRQ   HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_2)
 
 /****************************************************************************************************/
 // NRF24L01寄存器操作命令
@@ -65,11 +68,19 @@
 #define MODEL_RX2       3           // 接收模式2，用于双向传输
 #define MODEL_TX2       4           // 发送模式2，用于双向传输
 
+uint8_t NRF24L01_Write_Reg(uint8_t regaddr,uint8_t data);
+uint8_t NRF24L01_Read_Reg(uint8_t regaddr);
+uint8_t NRF24L01_Write_Buf(uint8_t regaddr, uint8_t *pBuf, uint8_t datalen);
+uint8_t NRF24L01_Read_Buf(uint8_t regaddr,uint8_t *pBuf,uint8_t datalen);
+uint8_t NRF24L01_TxPacket(uint8_t *txbuf);
+uint8_t NRF24L01_RxPacket(uint8_t *txbuf);
+void NRF24L01_TX_Mode(void);
+void NRF24L01_RX_Mode(void);
+void NRF_TxPacket_AP(uint8_t *tx_buf, uint8_t len);
 
 uint8_t NRF24L01_Check(void);
-void ANO_NRF_Init(uint8_t model, uint8_t ch);
-uint8_t NRF24L01_TxPacket(uint8_t *txbuf);
-void ANO_NRF_Check_Event(void);
-void NRF24L01_init(void);
+void NRF24L01_Init(void);
+uint8_t NRF_RX_Wait_Connect(void);
+
 
 #endif

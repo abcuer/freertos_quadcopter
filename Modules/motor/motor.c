@@ -25,13 +25,28 @@ static void Update_Motor_PWM(uint8_t id, uint16_t pulse)
     }
 }
 
-void MotorSetPWM(float m1, float m2, float m3, float m4)
+// 最低启动PWM：1090
+void SetMotorPWM(float m1, float m2, float m3, float m4)
 {
-    Update_Motor_PWM(0, m1 + 1000);
-    Update_Motor_PWM(1, m2 + 1000);
-    Update_Motor_PWM(2, m3 + 1000);
-    Update_Motor_PWM(3, m4 + 1000);
+    Update_Motor_PWM(0, m1);
+    Update_Motor_PWM(1, m2);
+    Update_Motor_PWM(2, m3);
+    Update_Motor_PWM(3, m4);
+    // Update_Motor_PWM(0, m1 + 1000);
+    // Update_Motor_PWM(1, m2 + 1000);
+    // Update_Motor_PWM(2, m3 + 1000);
+    // Update_Motor_PWM(3, m4 + 1000);
 }
+
+void MotorLock(void)
+{
+    // 锁定时，实现PWM=1200, 2秒内缓慢减少PWM，2秒后彻底停止
+    Update_Motor_PWM(0,  1000);
+    Update_Motor_PWM(1,  1000);
+    Update_Motor_PWM(2,  1000);
+    Update_Motor_PWM(3,  1000);
+}
+
 
 void MotorTest(void)
 {
