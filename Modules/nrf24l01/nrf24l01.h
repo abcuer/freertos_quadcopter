@@ -80,7 +80,5 @@ void NRF_TxPacket_AP(uint8_t *tx_buf, uint8_t len);
 
 uint8_t NRF24L01_Check(void);
 void NRF24L01_Init(void);
-uint8_t NRF_RX_Wait_Connect(void);
-
 
 #endif

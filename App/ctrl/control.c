@@ -168,6 +168,6 @@ void FlyControl(void)
     motor_pwm[1] = basepwm + rate_pitch_pid.out + rate_roll_pid.out + rate_yaw_pid.out;
     motor_pwm[2] = basepwm - rate_pitch_pid.out + rate_roll_pid.out - rate_yaw_pid.out;
     motor_pwm[3] = basepwm - rate_pitch_pid.out - rate_roll_pid.out + rate_yaw_pid.out;
-    MotorSetPWM(motor_pwm[0], motor_pwm[1], motor_pwm[2], motor_pwm[3]);
+    SetMotorPWM(motor_pwm[0], motor_pwm[1], motor_pwm[2], motor_pwm[3]);
 }
 

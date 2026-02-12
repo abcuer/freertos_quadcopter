@@ -106,10 +106,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // SetMotorPWM(1090, 1090, 1090, 1090);
-    if(Remote_Parse_Task()==0)
+    Remote_ReceiveData();
+    if(flight_rc_data.CONNECT)
     {
-        SetMotorPWM(flight_rc_data.THR, flight_rc_data.THR, flight_rc_data.THR, flight_rc_data.THR);
+        
         SetLedMode(bLEDL, LED_TOGGLE);     // 连接成功，蓝红双闪
         SetLedMode(bLEDR, LED_TOGGLE);
         SetLedMode(rLEDL, LED_TOGGLE);
@@ -123,6 +123,7 @@ int main(void)
         SetLedMode(rLEDL, LED_TOGGLE);
         SetLedMode(rLEDR, LED_TOGGLE);
     }
+    SetMotorPWM(flight_rc_data.THR, flight_rc_data.THR, flight_rc_data.THR, flight_rc_data.THR);
     HAL_Delay(100);
     // BMI088_Read(&gyro_acc);
     // main_loop();

@@ -10,27 +10,32 @@
 void System_Init(void)
 {
     LedDevice_Init();
-    // if (BMI088_Init() == 0)
-    // {
+    if (BMI088_Init() == 0)
+    {
+        BMI088_Calibrate();
+    }
 
-    //     BMI088_Calibrate();
-    //     if(BMI088_Verify_Installation()==1)
-    //     {
-    //         SetLedMode(bLEDL, LED_ON);
-    //         SetLedMode(bLEDR, LED_ON);
-            
-    //     }
-    //     else 
-    //     {
-    //         SetLedMode(rLEDL, LED_ON);
-    //         SetLedMode(rLEDR, LED_ON);
-    //         while(1);
-    //     }
-    // }
     NRF24L01_Init();
 
     // SPL06_Init();
     // Flow_Init();    
     Motor_Init();
     delay_ms(3000);
+}
+
+/**
+ * @brief 接收端等待连接
+ * @return 0: 收到数据包(连接建立), 1: 等待中
+ */
+uint8_t NRF_RX_Wait_Connect(void)
+{
+    uint8_t temp_buf[32];
+    
+    // 轮询是否收到数据
+    if(NRF24L01_RxPacket(temp_buf) == 0)
+    {
+        // 可以在这里判断 temp_buf 的内容是否为握手协议内容
+        return 0; 
+    }
+    return 1;
 }

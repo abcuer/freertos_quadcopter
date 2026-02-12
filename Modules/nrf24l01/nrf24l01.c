@@ -191,7 +191,6 @@ uint8_t NRF24L01_Check(void)
     {
         if(buf1[i] != 0XA5) 
         {
-            SetLedMode(rLEDL, LED_ON);
             return 1; // 失败  
         }
     }
@@ -250,125 +249,10 @@ static void NRF_Init(uint8_t model, uint8_t ch)
 void NRF24L01_Init(void)
 {
     // 1. 检查硬件是否在线
-    while(NRF24L01_Check())
-    {
-        // 硬件连接失败，可以在这里加LED闪烁提示
-        SetLedMode(bLEDL, LED_OFF);     // 初始化失败，红灯亮
-        SetLedMode(bLEDR, LED_OFF);
-        SetLedMode(rLEDL, LED_ON);
-        SetLedMode(rLEDR, LED_ON);
-        HAL_Delay(100);
-    }
-    
+    while(NRF24L01_Check());
     // 2. 配置为接收模式
     NRF24L01_RX_Mode();
-    SetLedMode(bLEDL, LED_ON);      // 初始化成功，蓝灯亮
-    SetLedMode(bLEDR, LED_ON);
-    SetLedMode(rLEDL, LED_OFF);
-    SetLedMode(rLEDR, LED_OFF);
 }
 
-/**
- * @brief 接收端等待连接
- * @return 0: 收到数据包(连接建立), 1: 等待中
- */
-uint8_t NRF_RX_Wait_Connect(void)
-{
-    uint8_t temp_buf[32];
-    
-    // 轮询是否收到数据
-    if(NRF24L01_RxPacket(temp_buf) == 0)
-    {
-        // 可以在这里判断 temp_buf 的内容是否为握手协议内容
-        return 0; 
-    }
-    return 1;
-}
 
-// void NRF24L01_init(void)
-// {
-//     uint8_t i = 0;
-//     uint8_t status = 1; // 默认失败
-
-    // 接收端(飞控端)
-    // do {
-    //     NRF24L01_RX_Mode();
-    //     HAL_Delay(5);          
-    //     status = NRF24L01_Check();
-    //     i++;
-        
-    //     if(i > 100) break;     // 尝试100次后放弃
-    // } while(status == 1);
-
-    // if(status == 0) {
-    //     SetLedMode(bLEDL, LED_ON);      // 初始化成功，蓝灯亮
-    //     SetLedMode(bLEDR, LED_ON);
-    //     SetLedMode(rLEDL, LED_OFF);
-    //     SetLedMode(rLEDR, LED_OFF);
-    // } else {
-    //     SetLedMode(bLEDL, LED_OFF);     // 初始化成功，红灯亮
-    //     SetLedMode(bLEDR, LED_OFF);
-    //     SetLedMode(rLEDL, LED_ON);
-    //     SetLedMode(rLEDR, LED_ON);
-    // }
-// }
-
-/**
- * @brief 4ms周期调用函数（核心事件处理）
- */
- 
-// void ANO_NRF_Check_Event(void)
-// {
-//     uint8_t sta = NRF24L01_Read_Reg(SPI_READ_REG + STATUS);
-    
-//     if(sta & (1<<6)) // RX_DR: 接收到数据
-//     {
-//         uint8_t rx_len = NRF24L01_Read_Reg(R_RX_PL_WID);
-//         if(rx_len <= 32)
-//         {
-//             // 读取数据到NRF24L01_2_RXDATA
-//             NRF24L01_Read_Buf(RD_RX_PLOAD, NRF24L01_2_RXDATA, rx_len);
-            
-//             // 同时更新remote_data
-//             if(rx_len >= 10) // 确保数据长度足够
-//             {
-//                 remote_data.THR = (NRF24L01_2_RXDATA[0] << 8) | NRF24L01_2_RXDATA[1];
-//                 remote_data.YAW = (NRF24L01_2_RXDATA[2] << 8) | NRF24L01_2_RXDATA[3];
-//                 remote_data.PIT = (NRF24L01_2_RXDATA[4] << 8) | NRF24L01_2_RXDATA[5];
-//                 remote_data.ROL = (NRF24L01_2_RXDATA[6] << 8) | NRF24L01_2_RXDATA[7];
-//                 remote_data.FIX_HEIGHT = NRF24L01_2_RXDATA[8];
-//                 remote_data.LOCK = NRF24L01_2_RXDATA[9];
-//                 remote_data.NRF_ERR = 0;
-//             }
-//             Nrf_Erro = 0; // 成功接收，清除错误计数
-//         }
-//         else 
-//         {
-//             NRF24L01_Write_Reg(FLUSH_RX, 0xff); // 异常长度清空缓存
-//             remote_data.NRF_ERR = 1;
-//         }
-//     }
-//     // 清除状态标志
-//     NRF24L01_Write_Reg(SPI_WRITE_REG + STATUS, sta);
-// }
-// void ANO_NRF_Check_Event(void)
-// {
-//     uint8_t sta = NRF24L01_Read_Reg(SPI_READ_REG + STATUS);
-    
-//     if(sta & (1<<6)) // RX_DR: 接收到数据
-//     {
-//         uint8_t rx_len = NRF24L01_Read_Reg(R_RX_PL_WID);
-//         if(rx_len <= 32)
-//         {
-//             NRF24L01_Read_Buf(RD_RX_PLOAD, NRF24L01_2_RXDATA, rx_len);
-//             Nrf_Erro = 0; // 成功接收，清除错误计数
-//         }
-//         else 
-//         {
-//             NRF24L01_Write_Reg(FLUSH_RX, 0xff); // 异常长度清空缓存
-//         }
-//     }
-//     // 清除状态标志
-//     NRF24L01_Write_Reg(SPI_WRITE_REG + STATUS, sta);
-// }
 

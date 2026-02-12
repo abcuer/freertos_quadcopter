@@ -17,7 +17,7 @@ typedef struct {
     uint8_t FIX_HEIGHT;  // 定高标志 (0/1)
     uint8_t CONNECT;     // 连接成功标志位
     uint8_t NRF_ERR;     // 错误计数
-} RC_Data_Struct;
+} Remote_Data_Struct;
 
 // 数据帧结构（用于通信）
 typedef struct __attribute__((packed)){ // 强制编译器取消对齐补齐
@@ -31,7 +31,7 @@ typedef struct __attribute__((packed)){ // 强制编译器取消对齐补齐
     uint8_t checksum;    // 校验和
 } RC_Frame_Struct;
 
-uint8_t Remote_Parse_Task(void);
-extern RC_Data_Struct flight_rc_data; 
+void Remote_ReceiveData(void);
+extern Remote_Data_Struct flight_rc_data; 
 
 #endif
