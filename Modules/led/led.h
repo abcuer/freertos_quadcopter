@@ -54,5 +54,6 @@ void LedDevice_Init(void);
 void SetLedMode(LED_Type_e LEDType, LED_Mode_e Mode);
 void Led_SyncBlink_Process(void);
 void Led_AltBlink_Process(void);
+void SetLedALL(LED_Mode_e Mode);
 
 #endif

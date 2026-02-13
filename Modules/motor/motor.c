@@ -32,10 +32,6 @@ void SetMotorPWM(float m1, float m2, float m3, float m4)
     Update_Motor_PWM(1, m2);
     Update_Motor_PWM(2, m3);
     Update_Motor_PWM(3, m4);
-    // Update_Motor_PWM(0, m1 + 1000);
-    // Update_Motor_PWM(1, m2 + 1000);
-    // Update_Motor_PWM(2, m3 + 1000);
-    // Update_Motor_PWM(3, m4 + 1000);
 }
 
 void MotorLock(void)

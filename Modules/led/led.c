@@ -84,6 +84,14 @@ void LedDevice_Init(void)
 	Led_Init(&config, bLEDR);
 }
 
+void SetLedALL(LED_Mode_e Mode)
+{
+    SetLedMode(rLEDL, Mode);
+    SetLedMode(rLEDR, Mode);
+    SetLedMode(bLEDL, Mode);
+    SetLedMode(bLEDR, Mode);
+}
+
 /**
  * @brief 所有LED同步闪烁一次
  * @note 需在定时处理函数或主循环中按周期调用

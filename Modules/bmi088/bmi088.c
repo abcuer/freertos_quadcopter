@@ -221,10 +221,12 @@ uint8_t BMI088_Init(void)
   */
 void BMI088_Calibrate(void)
 {
-    Gyro_Struct gyro_temp, gyro_sum;
-    Acc_Struct acc_temp, acc_sum;
+    Gyro_Struct gyro_temp;
+    Acc_Struct acc_temp;
+    int32_t gyro_sum_x = 0, gyro_sum_y = 0, gyro_sum_z = 0;
+    int32_t acc_sum_x = 0, acc_sum_y = 0, acc_sum_z = 0;
     // 采样次数
-    uint16_t sample_count = 200; 
+    uint16_t sample_count = 500; 
     uint16_t i;
     
     // 等待传感器稳定
@@ -234,23 +236,23 @@ void BMI088_Calibrate(void)
     for (i = 0; i < sample_count; i++)
     {
         BMI088_Read_Gyro_Raw(&gyro_temp);
-        gyro_sum.x += gyro_temp.x;
-        gyro_sum.y += gyro_temp.y;
-        gyro_sum.z += gyro_temp.z;
+        gyro_sum_x += gyro_temp.x;
+        gyro_sum_y += gyro_temp.y;
+        gyro_sum_z += gyro_temp.z;
         delay_ms(2);
     }
     
-    gyro_offset.x = (int32_t)(gyro_sum.x / sample_count);
-    gyro_offset.y = (int32_t)(gyro_sum.y / sample_count);
-    gyro_offset.z = (int32_t)(gyro_sum.z / sample_count);
+    gyro_offset.x = (int16_t)(gyro_sum_x / sample_count);
+    gyro_offset.y = (int16_t)(gyro_sum_y / sample_count);
+    gyro_offset.z = (int16_t)(gyro_sum_z / sample_count);
     
     // 校准加速度计（绕X轴背面安装）
     for (i = 0; i < sample_count; i++)
     {
         BMI088_Read_Acc_Raw(&acc_temp);
-        acc_sum.x += acc_temp.x;
-        acc_sum.y += acc_temp.y;
-        acc_sum.z += acc_temp.z;
+        acc_sum_x += acc_temp.x;
+        acc_sum_y += acc_temp.y;
+        acc_sum_z += acc_temp.z;
         delay_ms(2);
     }
     
@@ -265,9 +267,9 @@ void BMI088_Calibrate(void)
     // 所以：-raw_z = +8192  => raw_z = -8192
     // 因此偏移量应该是：测量值 - (-8192) = 测量值 + 8192
     
-    acc_offset.x = (int32_t)(acc_sum.x / sample_count);
-    acc_offset.y = (int32_t)(acc_sum.y / sample_count);
-    acc_offset.z = (int32_t)(acc_sum.z / sample_count + 8192); 
+    acc_offset.x = (int16_t)(acc_sum_x / sample_count);
+    acc_offset.y = (int16_t)(acc_sum_y / sample_count);
+    acc_offset.z = (int16_t)(acc_sum_z / sample_count + 8192); 
     
     // 重置姿态
     attitude.roll = 0;

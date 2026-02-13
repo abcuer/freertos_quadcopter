@@ -1,4 +1,5 @@
 #include "imu.h"
+#include "filter.h"
 #include "math.h"
 /* ============================欧拉角计算================================== */
 /* ===============================开始===================================== */
@@ -7,10 +8,10 @@
 float RtA = 57.2957795f;  // 弧度->度
 // 陀螺仪初始化量程+-2000度/秒于 1/(65536 / 4000) = 0.03051756*2
 // float Gyro_G = 0.03051756f * 2;
-float Gyro_G = 4000.0 / 65536;  // 度/s
+float Gyro_G = 4000.0 / 65536.0;  // 度/s
 // 度每秒,转换弧度每秒则 2*0.03051756 * 0.0174533f = 0.0005326*2
 // float Gyro_Gr = 0.0005326f * 2;
-float Gyro_Gr = 4000.0 / 65536 / 180 * 3.1415926; // 弧度/s
+float Gyro_Gr = 4000.0 / 65536.0 / 180.0 * 3.1415926; // 弧度/s
 
 // float Gyro_G = 0.06103515625f;  // 1/16.384
 
@@ -37,10 +38,32 @@ static float Q_rsqrt(float number)
     return y;
 }
 
-static double normAccz; /* z轴上的加速度 */
+static Gyro_Struct last_gyro_filtered = {0};
+void IMU_Get_GyroAcc(Gyro_Acc_Struct *gyro_acc)
+{
+    // 读取数据
+    BMI088_Read(gyro_acc);
+    
+    // 陀螺仪低通滤波（使用浮点计算）
+    float alpha = 0.15f;
+    // 转换为浮点计算，再转回整数
+    last_gyro_filtered.x = (int16_t)(alpha * gyro_acc->gyro.x + 
+                                    (1.0f - alpha) * last_gyro_filtered.x);
+    last_gyro_filtered.y = (int16_t)(alpha * gyro_acc->gyro.y + 
+                                    (1.0f - alpha) * last_gyro_filtered.y);
+    last_gyro_filtered.z = (int16_t)(alpha * gyro_acc->gyro.z + 
+                                    (1.0f - alpha) * last_gyro_filtered.z);
+    gyro_acc->gyro = last_gyro_filtered;
+    
+    // 加速度计卡尔曼滤波
+    gyro_acc->acc.x = (int16_t)Filter_KalmanFilter(&kfs[0], (double)gyro_acc->acc.x);
+    gyro_acc->acc.y = (int16_t)Filter_KalmanFilter(&kfs[1], (double)gyro_acc->acc.y);
+    gyro_acc->acc.z = (int16_t)Filter_KalmanFilter(&kfs[2], (double)gyro_acc->acc.z);
+}
 
+static double normAccz; /* z轴上的加速度 */
 /* pitch、roll可用，yaw变化太慢，实际赚了90度，只变化了30度 */
-void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
+void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
                                              EulerAngle_Struct *eulerAngle,
                                              float dt)
 {

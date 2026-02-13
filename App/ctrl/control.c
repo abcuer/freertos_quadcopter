@@ -1,37 +1,14 @@
 #include "control.h"
 #include "pid.h"
 #include "motor.h"
-#include "filter.h"
+#include "remote.h"
 #include "imu.h"
-
-float basepwm = 0.0f;
 
 // 定义陀螺仪和加速度
 Gyro_Acc_Struct gyro_acc;
 // 定义欧拉角
 EulerAngle_Struct euler_angle;
 
-PID_t rate_pitch_pid =
-{
-    .p = 0.0f,
-    .i = 0.0f,
-    .d = 0.0f,
-    .tar = 0.0f,
-    .deadband = 0.5f,
-    .max_out = 800.0f, // PWM最大值 1000
-    .mode = POSITION_PID, 
-};
-
-PID_t pitch_pid = 
-{
-    .p = 0.0f,
-    .i = 0.0f,
-    .d = 0.0f,
-    .tar = 0.0f,
-    .deadband = 0.5f,
-    .max_out = 800.0f, // PWM最大值 1000
-    .mode = POSITION_PID,
-};
 
 PID_t rate_roll_pid =
 {
@@ -41,7 +18,7 @@ PID_t rate_roll_pid =
     // 机械零点
     .tar = 0.0f,
     .deadband = 0.5f,
-    .max_out = 800.0f, // PWM最大值 1000
+    .max_out = 800.0f,
     .mode = POSITION_PID, 
 };
 
@@ -53,7 +30,29 @@ PID_t roll_pid =
     // 机械零点
     .tar = 0.0f,
     .deadband = 0.5f,
-    .max_out = 800.0f,  // PWM最大值 1000
+    .max_out = 800.0f,  
+    .mode = POSITION_PID,
+};
+
+PID_t rate_pitch_pid =
+{
+    .p = 0.0f,
+    .i = 0.0f,
+    .d = 0.0f,
+    .tar = 0.0f,
+    .deadband = 0.5f,
+    .max_out = 800.0f, // PWM最大值（2500 - 1000）
+    .mode = POSITION_PID, 
+};
+
+PID_t pitch_pid = 
+{
+    .p = 0.0f,
+    .i = 0.0f,
+    .d = 0.0f,
+    .tar = 0.0f,
+    .deadband = 0.5f,
+    .max_out = 800.0f, 
     .mode = POSITION_PID,
 };
 
@@ -65,7 +64,7 @@ PID_t rate_yaw_pid =
     // 机械零点
     .tar = 0.0f,
     .deadband = 0.5f,
-    .max_out = 800.0f,  // PWM最大值 1000
+    .max_out = 800.0f,  
     .mode = POSITION_PID, 
 };
 
@@ -77,40 +76,9 @@ PID_t yaw_pid =
     // 机械零点
     .tar = 0.0f,
     .deadband = 0.5f,
-    .max_out = 800.0f,  // PWM最大值 1000
+    .max_out = 800.0f,  
     .mode = POSITION_PID,
 };
-
-static Gyro_Struct last_gyro_filtered = {0};
-
-void IMU_Get_Gyro_Acc(Gyro_Acc_Struct *gyro_acc)
-{
-    // 读取数据
-    BMI088_Read(gyro_acc);
-    
-    // 陀螺仪低通滤波（使用浮点计算）
-    float alpha = 0.18f;
-    
-    // 转换为浮点计算，再转回整数
-    last_gyro_filtered.x = (int16_t)(alpha * gyro_acc->gyro.x + 
-                                    (1.0f - alpha) * last_gyro_filtered.x);
-    last_gyro_filtered.y = (int16_t)(alpha * gyro_acc->gyro.y + 
-                                    (1.0f - alpha) * last_gyro_filtered.y);
-    last_gyro_filtered.z = (int16_t)(alpha * gyro_acc->gyro.z + 
-                                    (1.0f - alpha) * last_gyro_filtered.z);
-    
-    gyro_acc->gyro = last_gyro_filtered;
-    
-    // 加速度计卡尔曼滤波
-    gyro_acc->acc.x = (int16_t)Filter_KalmanFilter(&kfs[0], (double)gyro_acc->acc.x);
-    gyro_acc->acc.y = (int16_t)Filter_KalmanFilter(&kfs[1], (double)gyro_acc->acc.y);
-    gyro_acc->acc.z = (int16_t)Filter_KalmanFilter(&kfs[2], (double)gyro_acc->acc.z);
-}
-
-void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, float dt)
-{
-    IMU_GetEulerAngle(gyro_acc, euler_angle, dt);
-}
 
 void PIDParam_Init(void)
 {
@@ -122,52 +90,71 @@ void PIDParam_Init(void)
     PID_Init(&rate_yaw_pid);
 }
 
-void PitchPidCtrl(void)
+static void RollPidCtrl(void)
 {
-    pitch_pid.now = euler_angle.pitch;
-    PidCalculate(&pitch_pid);
-}
-
-void RatePitchPID(void)
-{
-    rate_pitch_pid.tar = pitch_pid.out;
-    rate_pitch_pid.now = gyro_acc.gyro.x;
-    PidCalculate(&rate_pitch_pid);
-}
-
-void RollPidCtrl(void)
-{
+    // 1500处为0度，区间约+-30度
+    roll_pid.tar  = (flight_rc_data.ROL - 1500) * 0.06f; 
     roll_pid.now = euler_angle.roll;
     PidCalculate(&roll_pid);
 }
 
-void RateRollPID(void)
+static void RateRollPID(void)
 {
     rate_roll_pid.tar = roll_pid.out;
-    rate_roll_pid.now = gyro_acc.gyro.y;
+    rate_roll_pid.now = gyro_acc.gyro.x * Gyro_G;
     PidCalculate(&rate_roll_pid);
 }
 
-void YawPidCtrl(void)
+static void PitchPidCtrl(void)
+{
+    pitch_pid.tar = (flight_rc_data.PIT - 1500) * 0.06f;
+    pitch_pid.now = euler_angle.pitch;
+    PidCalculate(&pitch_pid);
+}
+
+static void RatePitchPID(void)
+{
+    rate_pitch_pid.tar = pitch_pid.out;
+    rate_pitch_pid.now = gyro_acc.gyro.y * Gyro_G;
+    PidCalculate(&rate_pitch_pid);
+}
+
+static void YawPidCtrl(void)
 {
     yaw_pid.now = euler_angle.yaw;
     PidCalculate(&yaw_pid);
 }
 
-void RateYawPID(void)
+static void RateYawPID(void)
 {
-    rate_yaw_pid.tar = yaw_pid.out;
-    rate_yaw_pid.now = gyro_acc.gyro.z;
+    // YAW 通常建议映射为内环的“期望旋转速度”，例   如 +-150度/秒
+    rate_yaw_pid.tar = (flight_rc_data.YAW - 1500) * 0.3f + yaw_pid.out;
+    rate_yaw_pid.now = gyro_acc.gyro.z * Gyro_G;
     PidCalculate(&rate_yaw_pid);
 }
 
+float motor_pwm[4];
 void FlyControl(void)
 {
-    float motor_pwm[4];
-    motor_pwm[0] = basepwm + rate_pitch_pid.out - rate_roll_pid.out - rate_yaw_pid.out;
-    motor_pwm[1] = basepwm + rate_pitch_pid.out + rate_roll_pid.out + rate_yaw_pid.out;
-    motor_pwm[2] = basepwm - rate_pitch_pid.out + rate_roll_pid.out - rate_yaw_pid.out;
-    motor_pwm[3] = basepwm - rate_pitch_pid.out - rate_roll_pid.out + rate_yaw_pid.out;
+    // 外环
+    RollPidCtrl();  
+    PitchPidCtrl(); 
+    YawPidCtrl();   
+    // 内环
+    RateRollPID();  // x
+    RatePitchPID(); // y
+    RateYawPID();   // z
+
+    motor_pwm[0] = flight_rc_data.THR + rate_roll_pid.out - rate_pitch_pid.out - rate_yaw_pid.out;
+    motor_pwm[1] = flight_rc_data.THR + rate_roll_pid.out + rate_pitch_pid.out + rate_yaw_pid.out;
+    motor_pwm[2] = flight_rc_data.THR - rate_roll_pid.out + rate_pitch_pid.out - rate_yaw_pid.out;
+    motor_pwm[3] = flight_rc_data.THR - rate_roll_pid.out - rate_pitch_pid.out + rate_yaw_pid.out;
+
+    motor_pwm[0] = Limit(motor_pwm[0], 1000, 2000);
+    motor_pwm[1] = Limit(motor_pwm[1], 1000, 2000);
+    motor_pwm[2] = Limit(motor_pwm[2], 1000, 2000);
+    motor_pwm[3] = Limit(motor_pwm[3], 1000, 2000);
+
     SetMotorPWM(motor_pwm[0], motor_pwm[1], motor_pwm[2], motor_pwm[3]);
 }
 

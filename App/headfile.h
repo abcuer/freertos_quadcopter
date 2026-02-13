@@ -26,6 +26,8 @@
 #include "utils.h"
 #include "remote.h"
 
+#include "FreeRTOS.h"
+#include "cmsis_os.h"
 /************************ 标志位 *********************/
 
 /************************ 全局变量 *********************/

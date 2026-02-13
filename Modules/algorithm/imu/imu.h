@@ -15,7 +15,8 @@ extern float RtA;
 extern float Gyro_G;
 extern float Gyro_Gr;
 
-void IMU_GetEulerAngle(Gyro_Acc_Struct  *gyroAccel,
+void IMU_Get_GyroAcc(Gyro_Acc_Struct *gyro_acc);
+void IMU_Get_EulerAngle(Gyro_Acc_Struct  *gyroAccel,
                         EulerAngle_Struct *eulerAngle,
                         float              dt);
 float IMU_GetNormAccZ(void);

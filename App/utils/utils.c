@@ -16,9 +16,30 @@ void System_Init(void)
     Power_Init();
     NRF24L01_Init();  
     Motor_Init();
+    PIDParam_Init();
     // SPL06_Init();
     // Flow_Init();  
-    delay_ms(3000);
+    SetLedALL(LED_ON);
+    delay_ms(2000);
+    SetLedALL(LED_OFF);
+}
+
+void LedScan(void)
+{
+    if(flight_rc_data.CONNECT)
+    {
+        SetLedMode(bLEDL, LED_TOGGLE);     // 连接成功，蓝红双闪
+        SetLedMode(bLEDR, LED_TOGGLE);
+        SetLedMode(rLEDL, LED_TOGGLE);
+        SetLedMode(rLEDR, LED_TOGGLE);
+    }
+    else 
+    { 
+        SetLedMode(bLEDL, LED_OFF);        // 连接失败，红灯闪
+        SetLedMode(bLEDR, LED_OFF);
+        SetLedMode(rLEDL, LED_TOGGLE);
+        SetLedMode(rLEDR, LED_TOGGLE);
+    }
 }
 
 /**
