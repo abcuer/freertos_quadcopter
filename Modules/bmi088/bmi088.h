@@ -29,16 +29,16 @@
 
 typedef struct
 {
-    int16_t x;
-    int16_t y;
-    int16_t z;
+    int32_t x;
+    int32_t y;
+    int32_t z;
 }Acc_Struct;
 
 typedef struct
 {
-    int16_t x;
-    int16_t y;
-    int16_t z;
+    int32_t x;
+    int32_t y;
+    int32_t z;
 }Gyro_Struct;
 
 typedef struct

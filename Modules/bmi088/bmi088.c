@@ -172,11 +172,9 @@ uint8_t BMI088_Init(void)
 {
     uint8_t chip_id = 0;
     uint8_t retry = 0;
-    
-    // 初始化 IIC 总线
+
     IICInit(&bmi088_bus);
-    
-    // 1. 初始化加速度计
+    // 初始化加速度计
     for (retry = 0; retry < 5; retry++)
     {
         chip_id = IIC_Read_One_Byte(&bmi088_bus, BMI088_ACC_ADDR, ACC_CHIP_ID);
@@ -184,23 +182,20 @@ uint8_t BMI088_Init(void)
         delay_ms(10);
     }
     if (chip_id != 0x1E) return 1;
-        
     // 软复位加速度计
     IIC_Write_One_Byte(&bmi088_bus, BMI088_ACC_ADDR, ACC_SOFTRESET, 0xB6);
     delay_ms(10);
-    
     // 配置加速度计电源模式：主动模式
     IIC_Write_One_Byte(&bmi088_bus, BMI088_ACC_ADDR, ACC_PWR_CONF, 0x00);
     delay_ms(5);
     IIC_Write_One_Byte(&bmi088_bus, BMI088_ACC_ADDR, ACC_PWR_CTRL, 0x04);
     delay_ms(10);
-    
     // 配置加速度计参数：±6g, ODR 400Hz, OSR4
     IIC_Write_One_Byte(&bmi088_bus, BMI088_ACC_ADDR, ACC_CONF, 0x1A); // 0x1A = OSR4 + 400Hz
     IIC_Write_One_Byte(&bmi088_bus, BMI088_ACC_ADDR, ACC_RANGE, 0x01); // ±6g
     delay_ms(10);
-    
-    // 2. 初始化陀螺仪
+
+    // 初始化陀螺仪
     for (retry = 0; retry < 5; retry++)
     {
         chip_id = IIC_Read_One_Byte(&bmi088_bus, BMI088_GYRO_ADDR, GYRO_CHIP_ID);
@@ -208,11 +203,9 @@ uint8_t BMI088_Init(void)
         delay_ms(10);
     }
     if (chip_id != 0x0F) return 2;
-        
     // 软复位陀螺仪
     IIC_Write_One_Byte(&bmi088_bus, BMI088_GYRO_ADDR, GYRO_SOFTRESET, 0xB6);
     delay_ms(30);
-    
     // 配置陀螺仪参数：±2000dps, ODR 1000Hz, BW 116Hz, Normal Mode
     IIC_Write_One_Byte(&bmi088_bus, BMI088_GYRO_ADDR, GYRO_RANGE, 0x02);      // ±2000dps
     IIC_Write_One_Byte(&bmi088_bus, BMI088_GYRO_ADDR, GYRO_BANDWIDTH, 0x02);  // 1000Hz, BW 116Hz
@@ -228,12 +221,10 @@ uint8_t BMI088_Init(void)
   */
 void BMI088_Calibrate(void)
 {
-    Gyro_Struct gyro_temp;
-    Acc_Struct acc_temp;
-    int32_t gyro_sum_x = 0, gyro_sum_y = 0, gyro_sum_z = 0;
-    int32_t acc_sum_x = 0, acc_sum_y = 0, acc_sum_z = 0;
+    Gyro_Struct gyro_temp, gyro_sum;
+    Acc_Struct acc_temp, acc_sum;
     // 采样次数
-    uint16_t sample_count = 500; 
+    uint16_t sample_count = 200; 
     uint16_t i;
     
     // 等待传感器稳定
@@ -243,23 +234,23 @@ void BMI088_Calibrate(void)
     for (i = 0; i < sample_count; i++)
     {
         BMI088_Read_Gyro_Raw(&gyro_temp);
-        gyro_sum_x += gyro_temp.x;
-        gyro_sum_y += gyro_temp.y;
-        gyro_sum_z += gyro_temp.z;
+        gyro_sum.x += gyro_temp.x;
+        gyro_sum.y += gyro_temp.y;
+        gyro_sum.z += gyro_temp.z;
         delay_ms(2);
     }
     
-    gyro_offset.x = (int16_t)(gyro_sum_x / sample_count);
-    gyro_offset.y = (int16_t)(gyro_sum_y / sample_count);
-    gyro_offset.z = (int16_t)(gyro_sum_z / sample_count);
+    gyro_offset.x = (int32_t)(gyro_sum.x / sample_count);
+    gyro_offset.y = (int32_t)(gyro_sum.y / sample_count);
+    gyro_offset.z = (int32_t)(gyro_sum.z / sample_count);
     
     // 校准加速度计（绕X轴背面安装）
     for (i = 0; i < sample_count; i++)
     {
         BMI088_Read_Acc_Raw(&acc_temp);
-        acc_sum_x += acc_temp.x;
-        acc_sum_y += acc_temp.y;
-        acc_sum_z += acc_temp.z;
+        acc_sum.x += acc_temp.x;
+        acc_sum.y += acc_temp.y;
+        acc_sum.z += acc_temp.z;
         delay_ms(2);
     }
     
@@ -274,9 +265,9 @@ void BMI088_Calibrate(void)
     // 所以：-raw_z = +8192  => raw_z = -8192
     // 因此偏移量应该是：测量值 - (-8192) = 测量值 + 8192
     
-    acc_offset.x = (int16_t)(acc_sum_x / sample_count);
-    acc_offset.y = (int16_t)(acc_sum_y / sample_count);
-    acc_offset.z = (int16_t)(acc_sum_z / sample_count + 8192); 
+    acc_offset.x = (int32_t)(acc_sum.x / sample_count);
+    acc_offset.y = (int32_t)(acc_sum.y / sample_count);
+    acc_offset.z = (int32_t)(acc_sum.z / sample_count + 8192); 
     
     // 重置姿态
     attitude.roll = 0;

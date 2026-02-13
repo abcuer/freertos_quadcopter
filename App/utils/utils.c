@@ -1,6 +1,4 @@
 #include "headfile.h"
-#include "bsp_delay.h"
-#include "led.h"
 
 /**
  * @brief 系统初始化函数，初始化所有模块和外设
@@ -12,14 +10,14 @@ void System_Init(void)
     LedDevice_Init();
     if (BMI088_Init() == 0)
     {
+        // 零偏校准
         BMI088_Calibrate();
     }
-
-    NRF24L01_Init();
-
-    // SPL06_Init();
-    // Flow_Init();    
+    Power_Init();
+    NRF24L01_Init();  
     Motor_Init();
+    // SPL06_Init();
+    // Flow_Init();  
     delay_ms(3000);
 }
 

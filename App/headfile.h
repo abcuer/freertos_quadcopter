@@ -19,13 +19,12 @@
 #include "flow.h"
 #include "motor.h"
 #include "nrf24l01.h"
-
+#include "power.h"
 #include "imu.h"
 /***************** App ****************/
 #include "control.h"
 #include "utils.h"
 #include "remote.h"
-#include "scheduler.h"
 
 /************************ 标志位 *********************/
 
