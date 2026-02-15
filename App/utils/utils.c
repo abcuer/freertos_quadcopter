@@ -1,4 +1,5 @@
 #include "headfile.h"
+#include "led.h"
 
 /**
  * @brief 系统初始化函数，初始化所有模块和外设
@@ -8,18 +9,21 @@
 void System_Init(void)
 {
     LedDevice_Init();
+    PIDParam_Init();
     if (BMI088_Init() == 0)
     {
+        SetLedMode(rLEDL, LED_ON);
+        SetLedMode(bLEDL, LED_ON);
         // 零偏校准
         BMI088_Calibrate();
     }
+    SetLedALL(LED_ON);
     Power_Init();
     NRF24L01_Init();  
     Motor_Init();
-    PIDParam_Init();
     // SPL06_Init();
     // Flow_Init();  
-    SetLedALL(LED_ON);
+
     delay_ms(2000);
     SetLedALL(LED_OFF);
 }

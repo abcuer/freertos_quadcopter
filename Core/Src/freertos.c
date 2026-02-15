@@ -105,6 +105,7 @@ void MX_FREERTOS_Init(void) {
 
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
+
   osThreadDef(imuTask, StartIMUTask, osPriorityHigh, 0, 128);
   imuTaskHandle = osThreadCreate(osThread(imuTask), NULL);
 

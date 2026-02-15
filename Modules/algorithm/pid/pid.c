@@ -6,7 +6,7 @@
  */
 void PID_Init(PID_t *pid)
 {
-    pid->max_iout = pid->max_out * 0.2f; // 默认积分限幅为总输出的 20%
+    // pid->max_iout = pid->max_out * 1.0f; // 默认积分限幅为总输出的 20%
     if(pid->deadband == 0.0f) pid->deadband = 0.5f; // 默认死区为 0.5
     PidReset(pid); 
 }

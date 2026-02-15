@@ -10,12 +10,13 @@
 void StartIMUTask(void const * argument)
 {
     for(;;)
-    {
+    {   
         IMU_Get_GyroAcc(&gyro_acc);
         IMU_Get_EulerAngle(&gyro_acc, &euler_angle, IMU_PERIOD / 1000.0f);
         osDelay(IMU_PERIOD);
     }
 }
+
 
 void StartControlTask(void const * argument)
 {
