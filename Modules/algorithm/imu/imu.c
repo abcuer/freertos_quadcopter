@@ -61,22 +61,22 @@ void IMU_Get_GyroAcc(Gyro_Acc_Struct *gyro_acc)
     gyro_acc->acc.z = (int16_t)Filter_KalmanFilter(&kfs[2], (double)gyro_acc->acc.z);
 }
 
+#define BMI088_GYRO_SENSITIVITY 16.384f
+#define BMI088_ACC_SENSITIVITY 8192.0f
+
+static float gyro_roll = 0, gyro_pitch = 0, gyro_yaw = 0;
+static float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+static float yaw_drift_compensation = 0;  // Yaw漂移补偿值
+static uint32_t stationary_samples = 0;
+static float gz_history[10] = {0};  // 历史Gz值
+static uint8_t gz_index = 0;
+
 static double normAccz; /* z轴上的加速度 */
 /* pitch、roll可用，yaw变化太慢，实际赚了90度，只变化了30度 */
 void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
-                                             EulerAngle_Struct *eulerAngle,
-                                             float dt)
+                        EulerAngle_Struct *eulerAngle,
+                        float dt)
 {
-    #define BMI088_GYRO_SENSITIVITY 16.384f
-    #define BMI088_ACC_SENSITIVITY 8192.0f
-    
-    static float gyro_roll = 0, gyro_pitch = 0, gyro_yaw = 0;
-    static float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
-    static float yaw_drift_compensation = 0;  // Yaw漂移补偿值
-    static uint32_t stationary_samples = 0;
-    static float gz_history[10] = {0};  // 历史Gz值
-    static uint8_t gz_index = 0;
-    
     // 转换物理值
     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
@@ -122,7 +122,7 @@ void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
         }
         
         // Yaw零偏估计（需要长时间静止）
-        if (stationary_samples > 300) {  // 1.8秒
+        if (stationary_samples > 200) {  // 1.8秒
             // 长时间静止下的Gz均值作为零偏
             static float long_term_gz_sum = 0;
             static uint32_t long_term_cnt = 0;
@@ -130,7 +130,7 @@ void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
             long_term_gz_sum += gz_raw;
             long_term_cnt++;
             
-            if (long_term_cnt > 1000) {  // 6秒数据
+            if (long_term_cnt > 500) {  // 6秒数据
                 gyro_bias_z = long_term_gz_sum / long_term_cnt;
                 long_term_gz_sum = 0;
                 long_term_cnt = 0;

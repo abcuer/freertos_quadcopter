@@ -1,9 +1,5 @@
 #include "remote.h"
-#include "led.h"
-#include "motor.h"
 #include "nrf24l01.h"
-#include "bsp_delay.h"
-#include "stm32f1xx_hal.h"
 
 Remote_Data_Struct flight_rc_data = {0}; 
 

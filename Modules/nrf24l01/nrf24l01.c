@@ -1,6 +1,4 @@
 #include "nrf24l01.h"
-#include "led.h"
-#include "stm32f1xx_hal.h"
 
 /* 地址定义 */
 const uint8_t TX_ADDRESS[]= {0xAA,0xBB,0xCC,0x00,0x01}; // 发送地址 

@@ -47,8 +47,8 @@
 /* USER CODE BEGIN Variables */
 
 /* USER CODE END Variables */
-osThreadId imuTaskHandle;
 osThreadId controlTaskHandle;
+// osThreadId imuTaskHandle;
 osThreadId commTaskHandle;
 osThreadId otherTaskHandle;
 
@@ -106,8 +106,8 @@ void MX_FREERTOS_Init(void) {
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
 
-  osThreadDef(imuTask, StartIMUTask, osPriorityHigh, 0, 128);
-  imuTaskHandle = osThreadCreate(osThread(imuTask), NULL);
+  // osThreadDef(imuTask, StartControlTask, osPriorityHigh, 0, 128);
+  // imuTaskHandle = osThreadCreate(osThread(imuTask), NULL);
 
   osThreadDef(controlTask, StartControlTask, osPriorityHigh, 0, 256);
   controlTaskHandle = osThreadCreate(osThread(controlTask), NULL);

@@ -1,76 +1,45 @@
 #include "pid.h"
-#include <math.h>
-
-/**
- * @brief PID 参数初始化
- */
-void PID_Init(PID_t *pid)
-{
-    // pid->max_iout = pid->max_out * 1.0f; // 默认积分限幅为总输出的 20%
-    if(pid->deadband == 0.0f) pid->deadband = 0.5f; // 默认死区为 0.5
-    PidReset(pid); 
-}
 
 /**
  * @brief 重置 PID 历史状态
  */
-void PidReset(PID_t *pid)
-{
-    pid->now = 0.0f;
-    pid->error[0] = pid->error[1] = pid->error[2] = 0.0f;
-    pid->pout = pid->iout = pid->dout = pid->out = 0.0f;
-}
-
 /**
- * @brief PID 输出限幅实现
+ * @brief 重置 PID 结构体中的历史状态量
+ * @param pid 指向需要重置的 PID 结构体的指针
  */
-static void PidOutLimit(PID_t *pid)
+void PID_Reset(PID_Struct *pid)
 {
-    if (pid->out > pid->max_out)  pid->out = pid->max_out;
-    if (pid->out < -pid->max_out) pid->out = -pid->max_out;
+    // 清除测量值，防止逻辑残留
+    pid->measure = 0.0f;
+    // 清除历史状态，防止启动瞬间由于旧数据导致大幅跳变
+    pid->integral = 0.0f;    // 清除积分累计
+    pid->last_error = 0.0f;  // 清除上一次误差（影响微分项）
+    // 清除当前输出值
+    pid->output = 0.0f;     
 }
 
-/**
- * @brief PID 核心计算
- */
-void PidCalculate(PID_t *pid)
+void PID_Calculate(PID_Struct *pid, float dt)
 {
-    // 1. 计算当前误差
-    pid->error[0] = pid->tar - pid->now;
-
-    // 2. 死区处理：如果误差非常小，直接视为0，防止电机在高频率噪声下抖动
-    if (fabs(pid->error[0]) < pid->deadband) 
-    {
-        pid->error[0] = 0.0f;
-    }
-
-    // 3. 进入不同模式的算法
-    if (pid->mode == DELTA_PID)  // 增量式 PID
-    {
-        pid->pout = pid->p * (pid->error[0] - pid->error[1]);
-        pid->iout = pid->i * pid->error[0];
-        pid->dout = pid->d * (pid->error[0] - 2.0f * pid->error[1] + pid->error[2]);
-        
-        pid->out += pid->pout + pid->iout + pid->dout;
-    }
-    else if (pid->mode == POSITION_PID)  // 位置式 PID
-    {
-        // 比例项
-        pid->pout = pid->p * pid->error[0];
-        
-        // 积分项（带抗饱和限幅）
-        pid->iout += pid->i * pid->error[0];
-        if (pid->iout > pid->max_iout)  pid->iout = pid->max_iout;
-        if (pid->iout < -pid->max_iout) pid->iout = -pid->max_iout;
-        
-        // 微分项
-        pid->dout = pid->d * (pid->error[0] - pid->error[1]);
-        
-        pid->out = pid->pout + pid->iout + pid->dout;
-    }
-    // 4. 总输出限幅
-    PidOutLimit(pid); 
-    // 5. 更新误差历史
-    pid->error[2] = pid->error[1];
-    pid->error[1] = pid->error[0];
+    // 计算误差
+    float error = pid->desire - pid->measure;
+    // 计算积分项
+    pid->integral += error * dt;
+    // pid->integral = Limit(pid->integral, -50, 50);
+    // 计算微分项
+    float derivative = (error - pid->last_error) / dt;
+    // 计算输出
+    pid->output = pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
+    // 保存上一次误差
+    pid->last_error = error;
 }
+
+void PID_Cascade(PID_Struct *outter, PID_Struct *inner, float dt)
+{
+    // 计算外部PID
+    PID_Calculate(outter, dt);
+    // 计算内部PID
+    inner->desire = outter->output;
+    PID_Calculate(inner, dt);
+}
+
+

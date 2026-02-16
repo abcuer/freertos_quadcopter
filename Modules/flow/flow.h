@@ -3,7 +3,7 @@
 
 #include "math.h"
 #include "stdint.h"
-#include <stdint.h>
+#include "bmi088.h"
 
 // 弧度与角度转换常量
 #define ANG_2_RAD 0.01745329f
@@ -82,7 +82,7 @@ extern float pixel_cpi;
 
 void Flow_Init(void);
 void Flow_Receive(uint8_t data);          
-void Pixel_Flow_Fix(float dT);        
+void Pixel_Flow_Fix(EulerAngle_Struct *euler_angle,float dT) ;        
 
 /**
  * @brief 移动坐标轴归零函数

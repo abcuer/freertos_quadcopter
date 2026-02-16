@@ -9,7 +9,6 @@
 void System_Init(void)
 {
     LedDevice_Init();
-    PIDParam_Init();
     if (BMI088_Init() == 0)
     {
         SetLedMode(rLEDL, LED_ON);
@@ -18,13 +17,12 @@ void System_Init(void)
         BMI088_Calibrate();
     }
     SetLedALL(LED_ON);
+    Motor_Init();
     Power_Init();
     NRF24L01_Init();  
-    Motor_Init();
+
     // SPL06_Init();
     // Flow_Init();  
-
-    delay_ms(2000);
     SetLedALL(LED_OFF);
 }
 
