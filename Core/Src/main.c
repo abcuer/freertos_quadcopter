@@ -21,6 +21,7 @@
 #include "cmsis_os.h"
 #include "adc.h"
 #include "dma.h"
+#include "motor.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -101,7 +102,6 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   System_Init();
-
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in cmsis_os2.c) */

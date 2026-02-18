@@ -12,7 +12,7 @@
  * @brief 光流融合输出数据结构体
  * 存储经过高度补偿、姿态补偿及滤波后的最终位移和速度
  */
-struct _pixel_flow_
+typedef struct 
 {
     // --- 位移相关 (单位: cm) ---
     float fix_x_i;      // x轴积分滤波值（不含姿态补偿）
@@ -41,20 +41,13 @@ struct _pixel_flow_
     uint8_t flow_pause;      // 光流暂停标志位
     uint8_t err1_cnt;        // 异常计数器1（数据失效）
     uint8_t err2_cnt;        // 异常计数器2（逻辑异常）
-};
-
-typedef struct{
-	float roll;
-	float pitch;
-	float yaw;
-	float tmp;
-}_st_AngE;
+} PIXEL_FLOW_Struct; // 定点结构体
 
 /**
  * @brief 光流原始数据结构体
  * 直接对接串口解析出来的原始像素数据
  */
-struct _flow_
+typedef struct 
 {
     float flow_x;       // 单帧x轴像素移动量
     float flow_y;       // 单帧y轴像素移动量
@@ -67,21 +60,15 @@ struct _flow_
     float flow_High;    // 光流模块内置高度（单位: cm）
     uint8_t qual;            // 光流信号质量 (0-255)
     uint8_t ok;              // 光流状态是否有效标志
-};
-
-typedef struct
-{
-    uint8_t data;
-    uint8_t flag;
-} FLOW_DATA_t;
+} FLOW_Struct;
 
 // 外部全局变量声明
-extern struct _pixel_flow_ pixel_flow;
-extern struct _flow_ mini;            
+extern PIXEL_FLOW_Struct pixel_flow;
+extern FLOW_Struct mini;            
 extern float pixel_cpi;               
 
 void Flow_Init(void);
-void Flow_Receive(uint8_t data);          
+void Flow_Parse_Data(uint8_t data);          
 void Pixel_Flow_Fix(EulerAngle_Struct *euler_angle,float dT) ;        
 
 /**

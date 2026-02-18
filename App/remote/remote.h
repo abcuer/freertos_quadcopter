@@ -28,6 +28,7 @@ typedef struct __attribute__((packed)){ // 强制编译器取消对齐补齐
     uint16_t ROL;        // 横滚
     uint8_t FIX_HEIGHT;  // 定高标志
     uint8_t LOCK_KEY;    // 锁定标志
+    uint8_t Fly_Mode;    // 飞行模式
     uint8_t checksum;    // 校验和
 } RC_Frame_Struct;
 

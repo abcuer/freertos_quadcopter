@@ -1,4 +1,5 @@
 #include "nrf24l01.h"
+#include "led.h"
 
 /* 地址定义 */
 const uint8_t TX_ADDRESS[]= {0xAA,0xBB,0xCC,0x00,0x01}; // 发送地址 
@@ -247,7 +248,13 @@ static void NRF_Init(uint8_t model, uint8_t ch)
 void NRF24L01_Init(void)
 {
     // 1. 检查硬件是否在线
-    while(NRF24L01_Check());
+    while(NRF24L01_Check())
+    {
+        SetLedMode(rLEDL, LED_ON);
+        SetLedMode(rLEDR, LED_ON);
+    }
+        SetLedMode(rLEDL, LED_OFF);
+        SetLedMode(rLEDR, LED_OFF);
     // 2. 配置为接收模式
     NRF24L01_RX_Mode();
 }

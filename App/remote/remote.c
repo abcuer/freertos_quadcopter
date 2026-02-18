@@ -2,7 +2,8 @@
 #include "nrf24l01.h"
 
 Remote_Data_Struct flight_rc_data = {0}; 
-
+// 默认 姿态模式
+// 否则 定高模式
 /**
  * @brief 计算数据帧的校验和
  * @param frame 数据帧指针

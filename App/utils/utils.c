@@ -16,13 +16,13 @@ void System_Init(void)
         // 零偏校准
         BMI088_Calibrate();
     }
-    SetLedALL(LED_ON);
-    Motor_Init();
+
     Power_Init();
     NRF24L01_Init();  
-
-    // SPL06_Init();
-    // Flow_Init();  
+    SetLedALL(LED_ON);
+    Motor_Init();
+    SPL06_Init();
+    Flow_Init(); 
     SetLedALL(LED_OFF);
 }
 

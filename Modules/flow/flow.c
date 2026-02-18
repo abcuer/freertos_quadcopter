@@ -1,17 +1,19 @@
 #include "flow.h"
 #include "usart.h"
 
-static FLOW_DATA_t rx_data;
-struct _flow_ mini;
-struct _pixel_flow_ pixel_flow;
+FLOW_Struct mini;
+PIXEL_FLOW_Struct pixel_flow;
+
 float pixel_cpi = 1.0f; 
 uint8_t Flow_SSI, Flow_SSI_CNT, Flow_Err;
 
+static uint8_t rx_data = 0;
 void Flow_Init(void)
 {
-    HAL_UART_Receive_IT(&huart1, &rx_data.data, 1);
+    HAL_UART_Receive_IT(&huart1, &rx_data, 1);
 }
-void Flow_Receive(uint8_t data) //串口1解析光流模块数据
+
+void Flow_Parse_Data(uint8_t data) //串口1解析光流模块数据
 {
 	static uint8_t RxBuffer[32];
 	static uint8_t _data_cnt = 0;
@@ -207,8 +209,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if(huart->Instance == USART1)   // 判断是USART2触发的回调
     {
-        Flow_Receive(rx_data.data);  // 处理接收到的数据
-        rx_data.flag = 1;  // 标记接收完成
-        HAL_UART_Receive_IT(&huart1, &rx_data.data, 1);
+        Flow_Parse_Data(rx_data);  // 处理接收到的数据
+
+        HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     }
 }
