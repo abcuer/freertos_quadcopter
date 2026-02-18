@@ -7,11 +7,6 @@ PIXEL_FLOW_Struct pixel_flow;
 float pixel_cpi = 1.0f; 
 uint8_t Flow_SSI, Flow_SSI_CNT, Flow_Err;
 
-static uint8_t rx_data = 0;
-void Flow_Init(void)
-{
-    HAL_UART_Receive_IT(&huart1, &rx_data, 1);
-}
 
 void Flow_Parse_Data(uint8_t data) //串口1解析光流模块数据
 {
@@ -205,12 +200,3 @@ void Pixel_Flow_Fix(EulerAngle_Struct *euler_angle,float dT)
     }
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    if(huart->Instance == USART1)   // 判断是USART2触发的回调
-    {
-        Flow_Parse_Data(rx_data);  // 处理接收到的数据
-
-        HAL_UART_Receive_IT(&huart1, &rx_data, 1);
-    }
-}

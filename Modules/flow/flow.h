@@ -65,7 +65,7 @@ typedef struct
 // 外部全局变量声明
 extern PIXEL_FLOW_Struct pixel_flow;
 extern FLOW_Struct mini;            
-extern float pixel_cpi;               
+extern float pixel_cpi;     
 
 void Flow_Init(void);
 void Flow_Parse_Data(uint8_t data);          

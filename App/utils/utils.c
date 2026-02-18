@@ -18,11 +18,11 @@ void System_Init(void)
     }
 
     Power_Init();
-    NRF24L01_Init();  
+    // NRF24L01_Init();  
     SetLedALL(LED_ON);
     Motor_Init();
     SPL06_Init();
-    Flow_Init(); 
+    Flow_Buffer_Init();
     SetLedALL(LED_OFF);
 }
 

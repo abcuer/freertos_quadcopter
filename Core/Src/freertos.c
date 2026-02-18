@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "task.h"
+#include "height.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,7 +52,7 @@ osThreadId controlTaskHandle;
 // osThreadId imuTaskHandle;
 osThreadId commTaskHandle;
 osThreadId otherTaskHandle;
-
+osThreadId usartTaskHandle;
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
@@ -115,9 +116,13 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(commTask, StartCommTask, osPriorityHigh, 0, 128);
   commTaskHandle = osThreadCreate(osThread(commTask), NULL);
 
-  osThreadDef(otherTask, StartOtherTask, osPriorityAboveNormal, 0, 128);
+  osThreadDef(otherTask, StartOtherTask, osPriorityNormal, 0, 128);
   otherTaskHandle = osThreadCreate(osThread(otherTask), NULL);
 
+  osThreadDef(usartTask, StartFlowTask, osPriorityAboveNormal, 0, 256);
+  usartTaskHandle = osThreadCreate(osThread(usartTask), NULL);
+
+  
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */

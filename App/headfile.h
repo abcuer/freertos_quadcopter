@@ -7,6 +7,7 @@
 /***************** App ****************/
 #include "main.h"
 #include "gpio.h"
+#include "usart.h"
 
 /***************** Bsp ****************/
 #include "bsp_gpio.h"
@@ -25,8 +26,10 @@
 #include "control.h"
 #include "utils.h"
 #include "remote.h"
+#include "height.h"
 
 #include "FreeRTOS.h"
+#include "stream_buffer.h"
 #include "cmsis_os.h"
 /************************ 标志位 *********************/
 
