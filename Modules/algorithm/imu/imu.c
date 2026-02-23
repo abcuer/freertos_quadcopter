@@ -41,7 +41,7 @@ static float Q_rsqrt(float number)
 static Gyro_Struct last_gyro_filtered = {0};
 void IMU_Get_GyroAcc(Gyro_Acc_Struct *gyro_acc)
 {
-    // 读取数据
+    // 读取原始数据
     BMI088_Read(gyro_acc);
     
     // 陀螺仪低通滤波（使用浮点计算）
@@ -72,7 +72,7 @@ static float gz_history[10] = {0};  // 历史Gz值
 static uint8_t gz_index = 0;
 
 static double normAccz; /* z轴上的加速度 */
-/* pitch、roll可用，yaw变化太慢，实际赚了90度，只变化了30度 */
+/* pitch、roll可用，yaw变化太慢，实际转了90度，只变化了30度 */
 void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
                         EulerAngle_Struct *eulerAngle,
                         float dt)

@@ -5,52 +5,21 @@
 #include "imu.h"
 #include "remote.h"
 
-/*
-    你的内环目前把飞机调成了一个**“无静差阻尼系统”**。
-    你把它拨到哪个角度，它就试图停在哪个角度（虽然因为零漂停不住）。
-    这正是角速度环调好的标志——它只负责“稳”，不负责“正”。
-*/
- 
 // 定义陀螺仪和加速度
 Gyro_Acc_Struct gyro_acc;
 // 定义欧拉角
 EulerAngle_Struct euler_angle;
-// 定义PID参数
-// 调到能比较合适的跟随摇杆运动，到平衡点后不会往返震荡，但是无法很快回归零点的话就可以确定下来
-/* 暂时只调整i */
-// PID_Struct pid_pitch = {.kp = 7.0f, .ki = 0.0f, .kd = 0.0f};
-// PID_Struct pid_gyro_y = {.kp = 1.9f, .ki = 0.002f, .kd = 0.075f};
-// PID_Struct pid_pitch = {.kp = 7.0f, .ki = 0.0f, .kd = 0.0f};
-// PID_Struct pid_gyro_y = {.kp = 1.9f, .ki = 0.001f, .kd = 0.07f};
-// PID_Struct pid_pitch = {.kp = 7.0f, .ki = 0.0f, .kd = 0.0f};
-// PID_Struct pid_gyro_y = {.kp = 1.9f, .ki = 0.00f, .kd = 0.07f};
-
-// // 只有一边能比较顺滑的回正，但是到达平衡点会小幅震荡，回正速度没有很快
-// PID_Struct pid_pitch = {.kp = 6.8f, .ki = 0.0f, .kd = 0.0f};
-// PID_Struct pid_gyro_y = {.kp = 1.52f, .ki = 0.0f, .kd = 0.05f};
-// 只有一边能比较顺滑的回正，但是到达平衡点会小幅震荡，回正速度没有很快
-
-/*
-    $K_d$ 合适：飞机迅速回到原位并瞬间纹丝不动（干净利落）。
-    $K_d$ 过小：飞机回到原位后会多晃动 2-3 下（像果冻一样）。回正过冲。弹簧效应、
-    $K_d$ 过大：飞机发出高频的嗡嗡声或金属震动声。
-*/
 
 // PID_Struct pid_pitch = {.kp = 6.8f, .ki = 0.0f, .kd = 0.0f};
 // PID_Struct pid_gyro_y = {.kp = 1.2f, .ki = 0.0f, .kd = 0.03f};
 PID_Struct pid_pitch = {.kp = 6.9f, .ki = 0.0f, .kd = 0.0f};
 PID_Struct pid_gyro_y = {.kp = 1.2f, .ki = 0.0f, .kd = 0.04f};
 
-// PID_Struct pid_pitch = {.kp = 6.0f, .ki = 0.0f, .kd = 0.0f};
-// PID_Struct pid_gyro_y = {.kp = 1.2f, .ki = 0.00f, .kd = 0.05f};
-// PID_Struct pid_pitch = {.kp = 5.5f, .ki = 0.0f, .kd = 0.0f};
-// PID_Struct pid_gyro_y = {.kp = 1.1f, .ki = 0.015f, .kd = 0.07f};
-
 PID_Struct pid_roll = {.kp = 6.9f, .ki = 0.0f, .kd = 0.0f};
 PID_Struct pid_gyro_x = {.kp = 1.2f, .ki = 0.0f, .kd = 0.04f};
 
 PID_Struct pid_yaw = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
-PID_Struct pid_gyro_z = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
+PID_Struct pid_gyro_z = {.kp = 1.2f, .ki = 0.0f, .kd = 0.04f};
 
 void Flight_Calculate_PID(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, Remote_Data_Struct *rc_data, float dt)
 {
@@ -73,15 +42,15 @@ void Flight_Calculate_PID(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_an
     PID_Cascade(&pid_yaw, &pid_gyro_z, dt);       // 串级 PID 计算
 }
 
-PID_Struct pid_height = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
+PID_Struct pid_height = {.kp = 3.0f, .ki = 0.0f, .kd = 0.1f};
 
-void HeightPidCtrl(FLOW_Struct *flow, float dt)
+void HeightPidCtrl(FLOW_Struct *flow, Remote_Data_Struct *rc_data, float dt)
 {
-    pid_height.desire = ABS(flight_rc_data.THR - 1000) * 0.4f;
+    pid_height.desire = ABS(rc_data->THR - 1000) * 0.4f;
     // vTaskSuspendAll(); // 暂停调度，防止被 FlowTask 抢占
     pid_height.measure = flow->flow_High;
-    PID_Calculate(&pid_height, dt);
     // xTaskResumeAll();  // 恢复调度
+    PID_Calculate(&pid_height, dt);
 }
 
 /*
@@ -94,15 +63,6 @@ void FlyControl(void)
 {
     if(flight_rc_data.CONNECT && flight_rc_data.THR >= 1050)
     {
-        // // 左上
-        // motor_pwm[2] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + (- pid_gyro_x.output + pid_gyro_y.output - pid_gyro_z.output);
-        // // 右上
-        // motor_pwm[1] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + (pid_gyro_x.output + pid_gyro_y.output + pid_gyro_z.output);
-        // // 左下
-        // motor_pwm[3] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + (- pid_gyro_x.output - pid_gyro_y.output + pid_gyro_z.output); 
-        // // 右下
-        // motor_pwm[0] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + (pid_gyro_x.output - pid_gyro_y.output - pid_gyro_z.output);
-
         // 左上
         motor_pwm[2] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + (- pid_gyro_x.output + pid_gyro_y.output - pid_gyro_z.output) + pid_height.output;
         // 右上

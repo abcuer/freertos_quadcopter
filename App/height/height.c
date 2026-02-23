@@ -33,7 +33,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
-
+// 光流数据解析
 void StartFlowTask(void const * argument)
 {
     uint8_t recv_data;
@@ -47,7 +47,7 @@ void StartFlowTask(void const * argument)
 
         if(xReceivedBytes > 0)
         {
-            // 在任务中进行复杂的浮点运算和解析
+            // 浮点运算和解析
             Flow_Parse_Data(recv_data); 
         }
     }

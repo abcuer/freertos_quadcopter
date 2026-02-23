@@ -53,6 +53,7 @@ osThreadId controlTaskHandle;
 osThreadId commTaskHandle;
 osThreadId otherTaskHandle;
 osThreadId usartTaskHandle;
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 

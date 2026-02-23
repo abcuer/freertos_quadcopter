@@ -17,14 +17,16 @@
 #define SPL06_ID_REG        0x0D
 
 // 校准参数结构体
-typedef struct {
+typedef struct 
+{
     int16_t c0, c1;
     int32_t c00, c10;
     int16_t c01, c11, c20, c21, c30;
 } SPL06_Calib_t;
 
 // SPL06 数据结构体
-typedef struct {
+typedef struct 
+{
     float temperature;
     float pressure;
     float height;
