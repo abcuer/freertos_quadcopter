@@ -1,9 +1,9 @@
 #ifndef _FLOW_H
 #define _FLOW_H
 
-#include "math.h"
 #include "stdint.h"
 #include "bmi088.h"
+#include "usart.h"
 
 // 弧度与角度转换常量
 #define ANG_2_RAD 0.01745329f

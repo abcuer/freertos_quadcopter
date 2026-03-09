@@ -49,6 +49,7 @@ static uint8_t Remote_ParseData(uint8_t *rx_buf, Remote_Data_Struct *rc_data)
 uint8_t rx_buf[32]; // NRF 接收缓冲区
 static uint8_t success_cnt = 0;
 static uint8_t fail_cnt = 0;
+
 void Remote_ReceiveData(void)
 {
     if (NRF24L01_RxPacket(rx_buf) == 0) 

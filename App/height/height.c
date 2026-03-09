@@ -1,7 +1,10 @@
-#include "headfile.h"
+#include "flow.h"
+#include "height.h"
+#include "FreeRTOS.h"
+#include "stream_buffer.h"
 
-// 定义缓冲区大小，建议为一包数据的几倍，比如 64 字节
-StreamBufferHandle_t xFlowStreamBuffer = NULL;
+extern StreamBufferHandle_t xFlowStreamBuffer;
+
 const size_t xStreamBufferSizeBytes = 64; 
 const size_t xTriggerLevel = 1; // 只要有 1 个字节进入就唤醒任务
 volatile uint8_t rx_data = 0;
@@ -33,21 +36,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
+
 // 光流数据解析
-void StartFlowTask(void const * argument)
+void Flow_GetData(void)
 {
     uint8_t recv_data;
-    for(;;)
+    if (xFlowStreamBuffer != NULL)
     {
-        // 阻塞等待缓冲区数据，portMAX_DELAY 表示无限等待
-        size_t xReceivedBytes = xStreamBufferReceive(xFlowStreamBuffer, 
-                                                     &recv_data, 
-                                                     1, 
-                                                     portMAX_DELAY);
-
-        if(xReceivedBytes > 0)
+        // 使用 while 循环，一次性把积攒的所有字节全部处理完
+        while(xStreamBufferReceive(xFlowStreamBuffer, &recv_data, 1, 0) > 0)
         {
-            // 浮点运算和解析
             Flow_Parse_Data(recv_data); 
         }
     }

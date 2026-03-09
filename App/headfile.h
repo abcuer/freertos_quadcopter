@@ -29,7 +29,6 @@
 #include "height.h"
 
 #include "FreeRTOS.h"
-#include "stream_buffer.h"
 #include "cmsis_os.h"
 /************************ 标志位 *********************/
 

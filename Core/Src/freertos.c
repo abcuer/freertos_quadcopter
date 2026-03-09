@@ -25,8 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "task.h"
-#include "height.h"
+#include "user_task.h"
+#include "stream_buffer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,11 +48,12 @@
 /* USER CODE BEGIN Variables */
 
 /* USER CODE END Variables */
+// 定义缓冲区大小，建议为一包数据的几倍，比如 64 字节
+StreamBufferHandle_t xFlowStreamBuffer = NULL;
+
 osThreadId controlTaskHandle;
-// osThreadId imuTaskHandle;
 osThreadId commTaskHandle;
 osThreadId otherTaskHandle;
-osThreadId usartTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -108,21 +109,14 @@ void MX_FREERTOS_Init(void) {
   /* Create the thread(s) */
   /* definition and creation of defaultTask */
 
-  // osThreadDef(imuTask, StartControlTask, osPriorityHigh, 0, 128);
-  // imuTaskHandle = osThreadCreate(osThread(imuTask), NULL);
-
-  osThreadDef(controlTask, StartControlTask, osPriorityHigh, 0, 256);
+  osThreadDef(controlTask, StartControlTask, osPriorityRealtime, 0, 256);
   controlTaskHandle = osThreadCreate(osThread(controlTask), NULL);
 
   osThreadDef(commTask, StartCommTask, osPriorityHigh, 0, 128);
   commTaskHandle = osThreadCreate(osThread(commTask), NULL);
 
-  osThreadDef(otherTask, StartOtherTask, osPriorityNormal, 0, 128);
+  osThreadDef(otherTask, StartOtherTask, osPriorityLow, 0, 128);
   otherTaskHandle = osThreadCreate(osThread(otherTask), NULL);
-
-  osThreadDef(usartTask, StartFlowTask, osPriorityAboveNormal, 0, 256);
-  usartTaskHandle = osThreadCreate(osThread(usartTask), NULL);
-
   
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */

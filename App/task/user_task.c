@@ -9,14 +9,17 @@
 /* 优先级：控制4，通讯3 灯控1 电源4 */
 
 // 任务执行周期(ms)
-#define CTRL_PERIOD 4
-#define COMM_PERIOD 10
-#define OTHER_PERIOD 50
+#define CTRL_PERIOD 5
+#define COMM_PERIOD 20
+#define OTHER_PERIOD 100
+
 // 控制任务
 void StartControlTask(void const * argument)
 {
     for(;;)
     {   
+        // 获取高度值
+        Flow_GetData();
         // 获取加速度和角速度
         IMU_Get_GyroAcc(&gyro_acc);
         // 获取欧拉角
@@ -30,6 +33,7 @@ void StartControlTask(void const * argument)
         osDelay(CTRL_PERIOD);
     }
 }
+
 // 通讯任务
 void StartCommTask(void const * argument)
 {
@@ -39,7 +43,8 @@ void StartCommTask(void const * argument)
         osDelay(COMM_PERIOD);
     }
 }
-// 其他任务:灯控
+
+// 其他任务:灯控/其他
 void StartOtherTask(void const * argument)
 {
     for(;;)

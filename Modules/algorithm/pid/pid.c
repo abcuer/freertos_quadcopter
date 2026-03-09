@@ -23,7 +23,7 @@ void PID_Calculate(PID_Struct *pid, float dt)
     // 计算误差
     float error = pid->desire - pid->measure;
     // 计算积分项
-    pid->integral += error;
+    pid->integral += error * dt;
     // pid->integral = Limit(pid->integral, -200, 200);
     // 计算微分项
     float derivative = (error - pid->last_error) / dt;

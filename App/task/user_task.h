@@ -1,5 +1,5 @@
-#ifndef __TASK_H
-#define __TASK_H
+#ifndef __USER_TASK_H
+#define __USER_TASK_H
 
 // void StartIMUTask(void const * argument);
 void StartControlTask(void const * argument);

@@ -47,7 +47,7 @@ PID_Struct pid_height = {.kp = 3.0f, .ki = 0.0f, .kd = 0.1f};
 void HeightPidCtrl(FLOW_Struct *flow, Remote_Data_Struct *rc_data, float dt)
 {
     pid_height.desire = ABS(rc_data->THR - 1000) * 0.4f;
-    // vTaskSuspendAll(); // 暂停调度，防止被 FlowTask 抢占
+    // vTaskSuspendAll(); // 暂停调度
     pid_height.measure = flow->flow_High;
     // xTaskResumeAll();  // 恢复调度
     PID_Calculate(&pid_height, dt);
