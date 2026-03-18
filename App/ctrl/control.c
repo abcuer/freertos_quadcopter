@@ -36,8 +36,8 @@ EulerAngle_Struct euler_angle;
 PID_Struct pid_pitch = {.kp = 6.8f, .ki = 0.0f, .kd = 0.0f};
 PID_Struct pid_gyro_y = {.kp = 1.52f, .ki = 0.0f, .kd = 0.05f};
 
-PID_Struct pid_roll = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
-PID_Struct pid_gyro_x = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
+PID_Struct pid_roll = {.kp = 6.8f, .ki = 0.0f, .kd = 0.0f};
+PID_Struct pid_gyro_x = {.kp = 1.52f, .ki = 0.0f, .kd = 0.05f};
 
 PID_Struct pid_yaw = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
 PID_Struct pid_gyro_z = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
@@ -45,21 +45,21 @@ PID_Struct pid_gyro_z = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
 void Flight_Calculate_PID(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, Remote_Data_Struct *rc_data, float dt)
 {
     // 计算俯仰角 (Pitch) PID
-    pid_pitch.desire = (rc_data->PIT - 1500) * 0.02f;            // 期望值（来自遥控器）
-    pid_pitch.measure = euler_angle->pitch;                     // 测量值（欧拉角）
-    pid_gyro_y.measure = gyro_acc->gyro.y * Gyro_G;             // 测量值（角速度）
+    pid_pitch.desire = (float)(rc_data->PIT - 1500) * 0.02f;            // 期望值（来自遥控器）
+    pid_pitch.measure = (float)euler_angle->pitch;                     // 测量值（欧拉角）
+    pid_gyro_y.measure = (float)gyro_acc->gyro.y * Gyro_G;             // 测量值（角速度）
     PID_Cascade(&pid_pitch, &pid_gyro_y, dt);     // 串级 PID 计算
 
     // 计算横滚角 (Roll) PID
-    pid_roll.desire = (rc_data->ROL - 1500) * 0.02f;             // 期望值
-    pid_roll.measure = euler_angle->roll;                       // 测量值
-    pid_gyro_x.measure = gyro_acc->gyro.x * Gyro_G;             // 测量值
+    pid_roll.desire = (float)(rc_data->ROL - 1500) * 0.02f;             // 期望值
+    pid_roll.measure = (float)euler_angle->roll;                       // 测量值
+    pid_gyro_x.measure = (float)gyro_acc->gyro.x * Gyro_G;             // 测量值
     PID_Cascade(&pid_roll, &pid_gyro_x, dt);      // 串级 PID 计算
 
     // 计算偏航角 (Yaw) PID
-    pid_yaw.desire = (rc_data->YAW - 1500) * 0.02f;              // 期望值
-    pid_yaw.measure = euler_angle->yaw;                         // 测量值
-    pid_gyro_z.measure = gyro_acc->gyro.z * Gyro_G;             // 测量值
+    pid_yaw.desire = (float)(rc_data->YAW - 1500) * 0.02f;              // 期望值
+    pid_yaw.measure = (float)euler_angle->yaw;                         // 测量值
+    pid_gyro_z.measure = (float)gyro_acc->gyro.z * Gyro_G;             // 测量值
     PID_Cascade(&pid_yaw, &pid_gyro_z, dt);       // 串级 PID 计算
 }
 
@@ -74,13 +74,17 @@ void FlyControl(void)
     if(flight_rc_data.CONNECT && flight_rc_data.THR >= 1050)
     {
         // 右下
-        motor_pwm[0] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + Limit((pid_gyro_x.output - pid_gyro_y.output - pid_gyro_z.output), -200.0f, 200.0f);
+        motor_pwm[0] = flight_rc_data.THR + (pid_gyro_x.output - pid_gyro_y.output - pid_gyro_z.output);
         // 右上
-        motor_pwm[1] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + Limit((pid_gyro_x.output + pid_gyro_y.output + pid_gyro_z.output), -200.0f, 200.0f);
+        motor_pwm[1] = flight_rc_data.THR + (pid_gyro_x.output + pid_gyro_y.output + pid_gyro_z.output);
         // 左上
-        motor_pwm[2] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + Limit((- pid_gyro_x.output + pid_gyro_y.output - pid_gyro_z.output), -200.0f, 200.0f);
+        motor_pwm[2] = flight_rc_data.THR + (- pid_gyro_x.output + pid_gyro_y.output - pid_gyro_z.output);
         // 左下
-        motor_pwm[3] = Limit(flight_rc_data.THR, 1000.0f, 1800.0f) + Limit((- pid_gyro_x.output - pid_gyro_y.output + pid_gyro_z.output), -200.0f, 200.0f); 
+        motor_pwm[3] = flight_rc_data.THR + (- pid_gyro_x.output - pid_gyro_y.output + pid_gyro_z.output); 
+
+        for(int i=0; i<4; i++) {
+            motor_pwm[i] = Limit(motor_pwm[i], 1100.0f, 1990.0f);
+        }
     }
     else 
     {

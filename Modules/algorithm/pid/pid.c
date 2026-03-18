@@ -24,11 +24,12 @@ void PID_Calculate(PID_Struct *pid, float dt)
     float error = pid->desire - pid->measure;
     // 计算积分项
     pid->integral += error * dt;
-    // pid->integral = Limit(pid->integral, -50, 50);
+    pid->integral = Limit(pid->integral, -100, 100);
     // 计算微分项
     float derivative = (error - pid->last_error) / dt;
     // 计算输出
     pid->output = pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
+    pid->output = Limit(pid->output, -500.0f, 500.0f);
     // 保存上一次误差
     pid->last_error = error;
 }

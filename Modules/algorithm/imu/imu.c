@@ -120,8 +120,8 @@ void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
 
     // 5. 互补滤波 (Complementary Filter)
     // 核心公式: Angle = K * (Angle + Gyro * dt) + (1-K) * Acc_Angle
-    // K值越大，越信任陀螺仪（抗震好，但随时间漂移）；K值越小，越信任加速度计（不漂移，但怕震动）
-    float K = 0.985f; 
+    // K值越大，越信任陀螺仪，越离手（抗震好，但随时间漂移）；K值越小，越信任加速度计，越跟手（不漂移，但怕震动）
+    float K = 0.85f; 
 
     // Roll & Pitch 融合解算
     eulerAngle->roll  = K * (eulerAngle->roll  + gy * dt) + (1.0f - K) * acc_roll;
