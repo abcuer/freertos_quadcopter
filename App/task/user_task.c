@@ -10,7 +10,7 @@
 
 // 任务执行周期(ms)
 #define CTRL_PERIOD 5
-#define COMM_PERIOD 20
+#define COMM_PERIOD 10
 #define OTHER_PERIOD 100
 
 // 控制任务
