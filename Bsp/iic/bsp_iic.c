@@ -1,5 +1,5 @@
 #include "bsp_iic.h"
-#include "bsp_delay.h"
+#include "bsp_dwt.h"
 
 /**
   * @brief SDA线输入模式配置
@@ -87,15 +87,12 @@ uint8_t SDA_Input(iic_bus_t *bus)
   */
 void IICStart(iic_bus_t *bus)
 {
-    SDA_Output(bus,1);
-    //delay1(DELAY_TIME);
-		delay_us(2);
-    SCL_Output(bus,1);
-		delay_us(1);
-    SDA_Output(bus,0);
-		delay_us(1);
-    SCL_Output(bus,0);
-		delay_us(1);
+    IIC_SDA_H(bus);
+    IIC_SCL_H(bus);
+    IIC_DELAY();
+    IIC_SDA_L(bus); // SCL高时，SDA由高变低
+    IIC_DELAY();
+    IIC_SCL_L(bus);
 }
 
 /**
@@ -105,15 +102,12 @@ void IICStart(iic_bus_t *bus)
   */
 void IICStop(iic_bus_t *bus)
 {
-    SCL_Output(bus,0);
-		delay_us(2);
-    SDA_Output(bus,0);
-		delay_us(1);
-    SCL_Output(bus,1);
-		delay_us(1);
-    SDA_Output(bus,1);
-		delay_us(1);
-
+    IIC_SCL_L(bus);
+    IIC_SDA_L(bus);
+    IIC_DELAY();
+    IIC_SCL_H(bus); // SCL高时，SDA由低变高
+    IIC_DELAY();
+    IIC_SDA_H(bus);
 }
 
 /**
@@ -121,26 +115,25 @@ void IICStop(iic_bus_t *bus)
   * @param None
   * @retval None
   */
-unsigned char IICWaitAck(iic_bus_t *bus)
+uint8_t IICWaitAck(iic_bus_t *bus)
 {
-    unsigned short cErrTime = 5;
-    SDA_Input_Mode(bus);
-    SCL_Output(bus,1);
-    while(SDA_Input(bus))
+    uint8_t retry = 0;
+    IIC_SDA_H(bus); // 释放SDA线（开漏模式写1即释放）
+    IIC_DELAY();
+    IIC_SCL_H(bus);
+    IIC_DELAY();
+    
+    while (IIC_SDA_READ(bus))
     {
-        cErrTime--;
-				delay_us(1);
-        if (0 == cErrTime)
+        retry++;
+        if (retry > 200) // 超时判断
         {
-            SDA_Output_Mode(bus);
             IICStop(bus);
-            return ERROR;
+            return 1;
         }
     }
-    SDA_Output_Mode(bus);
-    SCL_Output(bus,0);
-		delay_us(2);
-    return SUCCESS;
+    IIC_SCL_L(bus);
+    return 0;
 }
 
 /**
@@ -150,13 +143,12 @@ unsigned char IICWaitAck(iic_bus_t *bus)
   */
 void IICSendAck(iic_bus_t *bus)
 {
-    SDA_Output(bus,0);
-		delay_us(1);
-    SCL_Output(bus,1);
-		delay_us(1);
-    SCL_Output(bus,0);
-		delay_us(1);
-	
+    IIC_SCL_L(bus);
+    IIC_SDA_L(bus);
+    IIC_DELAY();
+    IIC_SCL_H(bus);
+    IIC_DELAY();
+    IIC_SCL_L(bus);
 }
 
 /**
@@ -166,13 +158,12 @@ void IICSendAck(iic_bus_t *bus)
   */
 void IICSendNotAck(iic_bus_t *bus)
 {
-    SDA_Output(bus,1);
-		delay_us(1);
-    SCL_Output(bus,1);
-		delay_us(1);
-    SCL_Output(bus,0);
-		delay_us(2);
-
+    IIC_SCL_L(bus);
+    IIC_SDA_H(bus);
+    IIC_DELAY();
+    IIC_SCL_H(bus);
+    IIC_DELAY();
+    IIC_SCL_L(bus);
 }
 
 /**
@@ -180,46 +171,40 @@ void IICSendNotAck(iic_bus_t *bus)
   * @param cSendByte 需要发送的字节
   * @retval None
   */
-void IICSendByte(iic_bus_t *bus,unsigned char cSendByte)
+void IICSendByte(iic_bus_t *bus, uint8_t data)
 {
-    unsigned char  i = 8;
-    while (i--)
+    for (uint8_t i = 0; i < 8; i++)
     {
-        SCL_Output(bus,0);
-        delay_us(2);
-        SDA_Output(bus, cSendByte & 0x80);
-				delay_us(1);
-        cSendByte += cSendByte;
-				delay_us(1);
-        SCL_Output(bus,1);
-				delay_us(1);
+        IIC_SCL_L(bus);
+        if (data & 0x80) IIC_SDA_H(bus);
+        else IIC_SDA_L(bus);
+        data <<= 1;
+        IIC_DELAY();
+        IIC_SCL_H(bus);
+        IIC_DELAY();
     }
-    SCL_Output(bus,0);
-		delay_us(2);
+    IIC_SCL_L(bus);
 }
-
 /**
   * @brief IIC接收一个字节
   * @param None
   * @retval 接收到的字节
   */
-unsigned char IICReceiveByte(iic_bus_t *bus)
+uint8_t IICReceiveByte(iic_bus_t *bus)
 {
-    unsigned char i = 8;
-    unsigned char cR_Byte = 0;
-    SDA_Input_Mode(bus);
-    while (i--)
+    uint8_t receive = 0;
+    IIC_SDA_H(bus); // 开漏模式下，写1即可直接读取
+    for (uint8_t i = 0; i < 8; i++)
     {
-        cR_Byte += cR_Byte;
-        SCL_Output(bus,0);
-				delay_us(2);
-        SCL_Output(bus,1);
-				delay_us(1);
-        cR_Byte |=  SDA_Input(bus);
+        IIC_SCL_L(bus);
+        IIC_DELAY();
+        IIC_SCL_H(bus);
+        receive <<= 1;
+        if (IIC_SDA_READ(bus)) receive++;
+        IIC_DELAY();
     }
-    SCL_Output(bus,0);
-    SDA_Output_Mode(bus);
-    return cR_Byte;
+    IIC_SCL_L(bus);
+    return receive;
 }
 
 uint8_t IIC_Write_One_Byte(iic_bus_t *bus, uint8_t daddr,uint8_t reg,uint8_t data)
@@ -359,15 +344,21 @@ uint8_t IIC_Read_Multi_Byte(iic_bus_t *bus, uint8_t daddr, uint8_t reg, uint8_t 
 void IICInit(iic_bus_t *bus)
 {
     GPIO_InitTypeDef GPIO_InitStructure = {0};
-    // 统一使用开漏输出，配合外部上拉
-    GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_OD; 
+
+    // SCL 可以是推挽输出
+    GPIO_InitStructure.Pin = bus->IIC_SCL_PIN;
+    GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStructure.Pull = GPIO_PULLUP;
     GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
-    
-    GPIO_InitStructure.Pin = bus->IIC_SDA_PIN;
-    HAL_GPIO_Init(bus->IIC_SDA_PORT, &GPIO_InitStructure);
-    
-    GPIO_InitStructure.Pin = bus->IIC_SCL_PIN;
     HAL_GPIO_Init(bus->IIC_SCL_PORT, &GPIO_InitStructure);
-}
 
+    // SDA 关键：配置为开漏输出 (Output Open-Drain)
+    GPIO_InitStructure.Pin = bus->IIC_SDA_PIN;
+    GPIO_InitStructure.Mode = GPIO_MODE_OUTPUT_OD; 
+    GPIO_InitStructure.Pull = GPIO_PULLUP; // 依靠内部或外部上拉
+    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(bus->IIC_SDA_PORT, &GPIO_InitStructure);
+
+    IIC_SCL_H(bus);
+    IIC_SDA_H(bus);
+}

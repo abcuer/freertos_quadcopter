@@ -130,3 +130,21 @@ void DWT_Delay(float Delay)
     while ((DWT->CYCCNT - tickstart) < wait * (float)CPU_FREQ_Hz)
         ;
 }
+
+void delay_us(uint32_t us)
+{
+    uint32_t start_tick = DWT->CYCCNT;
+    // 计算需要的时钟周期数：us * (每微秒的时钟频率)
+    // CPU_FREQ_Hz_us 在 DWT_Init 中已经计算好了 (72MHz下为72)
+    uint32_t delay_ticks = us * CPU_FREQ_Hz_us;
+
+    while ((DWT->CYCCNT - start_tick) < delay_ticks);
+}
+
+void delay_ms(uint32_t ms)
+{
+    while(ms--)
+    {
+        delay_us(1000);
+    }
+}

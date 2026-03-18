@@ -74,7 +74,6 @@ USER_ADD_DIR(${CMAKE_SOURCE_DIR}/App/remote)
 USER_ADD_DIR(${CMAKE_SOURCE_DIR}/App/task)
 
 USER_ADD_DIR(${CMAKE_SOURCE_DIR}/Bsp)
-USER_ADD_DIR(${CMAKE_SOURCE_DIR}/Bsp/delay)
 USER_ADD_DIR(${CMAKE_SOURCE_DIR}/Bsp/dwt)
 USER_ADD_DIR(${CMAKE_SOURCE_DIR}/Bsp/gpio)
 USER_ADD_DIR(${CMAKE_SOURCE_DIR}/Bsp/iic)
@@ -106,4 +105,28 @@ add_custom_command(
     COMMAND ${CMAKE_OBJCOPY} -Oihex  $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_BINARY_DIR}/${PROJECT_NAME}.hex
     COMMAND ${CMAKE_OBJCOPY} -Obinary $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_BINARY_DIR}/${PROJECT_NAME}.bin
     COMMAND ${SIZE} $<TARGET_FILE:${PROJECT_NAME}>
+)
+
+# ---------------- Ozone 自动化配置 -----------------
+# 定义插件路径（请确认路径中的斜杠方向）
+set(OZONE_PLUGIN_PATH "C:/Personal/OzoneV3.24a/Plugins/OS/FreeRTOSPlugin_CM3.js") # 注意：F1系列建议用CM3
+
+# 定义生成的 jdebug 文件路径
+set(OZONE_PROJECT_FILE "${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.jdebug")
+
+# 生成 Ozone 项目文件内容
+file(WRITE ${OZONE_PROJECT_FILE}
+    "/*********************************************************\n"
+    "* Ozone Project File\n"
+    "*********************************************************/\n"
+    "void OnProjectLoad (void) {\n"
+    "  Project.AddPathSubstitute (\"${CMAKE_SOURCE_DIR}\", \"$(ProjectDir)\");\n"
+    "  Project.SetDevice (\"STM32F103C8\");\n"
+    "  Project.SetHostIF (\"USB\", \"\");\n"
+    "  Project.SetTargetIF (\"SWD\");\n"
+    "  Project.SetTIFSpeed (\"4 MHz\");\n"
+    "  Project.AddLib (\"${CMAKE_BINARY_DIR}/${CMAKE_PROJECT_NAME}.elf\");\n"
+    "  // 自动加载 RTOS 插件\n"
+    "  Project.SetOSPlugin (\"${OZONE_PLUGIN_PATH}\");\n"
+    "}\n"
 )

@@ -1,7 +1,6 @@
 #include "bmi088.h"
 #include "bsp_iic.h"
-#include "bsp_delay.h"
-#include "led.h"
+#include "bsp_dwt.h"
 #include "memory.h"
 #include <math.h>
 
@@ -230,7 +229,7 @@ void BMI088_Calibrate(void)
     uint16_t i;
     
     // 等待传感器稳定
-    delay_ms(20);
+    delay_ms(10);
     
     // 校准陀螺仪（零偏）
     for (i = 0; i < sample_count; i++)

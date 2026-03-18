@@ -4,6 +4,15 @@
 #include "stm32f1xx_hal.h"
 #include "gpio.h"
 
+#define IIC_SCL_H(bus)  (bus->IIC_SCL_PORT->BSRR = bus->IIC_SCL_PIN)
+#define IIC_SCL_L(bus)  (bus->IIC_SCL_PORT->BRR  = bus->IIC_SCL_PIN)
+#define IIC_SDA_H(bus)  (bus->IIC_SDA_PORT->BSRR = bus->IIC_SDA_PIN)
+#define IIC_SDA_L(bus)  (bus->IIC_SDA_PORT->BRR  = bus->IIC_SDA_PIN)
+#define IIC_SDA_READ(bus) (bus->IIC_SDA_PORT->IDR & bus->IIC_SDA_PIN)
+
+// 若要达到400KHz，此处填1即可 (DWT_Delay保证了最小耗时)
+#define IIC_DELAY()     delay_us(1)
+
 typedef struct
 {
 	GPIO_TypeDef * IIC_SDA_PORT;

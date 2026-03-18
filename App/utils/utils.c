@@ -1,5 +1,7 @@
+#include "bsp_dwt.h"
 #include "headfile.h"
 #include "led.h"
+#include "system_stm32f1xx.h"
 
 /**
  * @brief 系统初始化函数，初始化所有模块和外设
@@ -8,6 +10,7 @@
  */
 void System_Init(void)
 {
+    DWT_Init(72);
     LedDevice_Init();
     if (BMI088_Init() == 0)
     {
@@ -21,8 +24,8 @@ void System_Init(void)
     Power_Init();
     NRF24L01_Init();  
 
-    // SPL06_Init();
-    // Flow_Init();  
+    SPL06_Init();
+    Flow_Init();  
     SetLedALL(LED_OFF);
 }
 

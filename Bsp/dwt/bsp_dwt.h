@@ -96,4 +96,7 @@ void DWT_Delay(float Delay);
  */
 void DWT_SysTimeUpdate(void);
 
+void delay_us(uint32_t us);
+void delay_ms(uint32_t ms);
+
 #endif /* BSP_DWT_H_ */
