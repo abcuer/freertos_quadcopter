@@ -9,9 +9,9 @@
 /* 优先级：控制4，通讯3 灯控1 电源4 */
 
 // 任务执行周期(ms)
-#define CTRL_PERIOD 4
-#define COMM_PERIOD 6
-#define OTHER_PERIOD 50
+#define CTRL_PERIOD 5
+#define COMM_PERIOD 10
+#define OTHER_PERIOD 100
 
 void StartControlTask(void const * argument)
 {
@@ -28,16 +28,6 @@ void StartControlTask(void const * argument)
         osDelay(CTRL_PERIOD);
     }
 }
-
-// void StartIMUTask(void const * argument)
-// {
-//     for(;;)
-//     {   
-
-
-//         osDelay(IMU_PERIOD);
-//     }
-// }
 
 void StartCommTask(void const * argument)
 {
