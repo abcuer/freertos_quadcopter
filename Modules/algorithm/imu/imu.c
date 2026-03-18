@@ -65,12 +65,18 @@ static float gz_history[10] = {0};  // 历史Gz值
 static uint8_t gz_index = 0;
 
 static double normAccz; /* z轴上的加速度 */
-/* pitch、roll可用，yaw变化太慢，实际转了90度，只变化了30度 */
+/**
+ * @description: 修复版姿态解算（互补滤波 + 动态零偏补偿）
+ * @param {Gyro_Acc_Struct} *gyroAccel 传感器原始数据
+ * @param {EulerAngle_Struct} *eulerAngle 欧拉角输出
+ * @param {float} dt 两次函数调用的时间间隔（秒）
+ */
 void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
                         EulerAngle_Struct *eulerAngle,
                         float dt)
 {
-    // 转换物理值
+    // 1. 物理值转换
+    // 加速度计单位: g, 陀螺仪单位: °/s
     float ax = (float)gyroAccel->acc.x / BMI088_ACC_SENSITIVITY;
     float ay = (float)gyroAccel->acc.y / BMI088_ACC_SENSITIVITY;
     float az = (float)gyroAccel->acc.z / BMI088_ACC_SENSITIVITY;
@@ -78,141 +84,68 @@ void IMU_Get_EulerAngle(Gyro_Acc_Struct *gyroAccel,
     float gx_raw = (float)gyroAccel->gyro.x / BMI088_GYRO_SENSITIVITY;
     float gy_raw = (float)gyroAccel->gyro.y / BMI088_GYRO_SENSITIVITY;
     float gz_raw = (float)gyroAccel->gyro.z / BMI088_GYRO_SENSITIVITY;
-    
-    // ============ 存储Gz历史值 ============
-    gz_history[gz_index] = gz_raw;
-    gz_index = (gz_index + 1) % 10;
-    
-    // ============ 零偏估计 ============
+
+    // 2. 静态零偏动态估计 (针对静止状态微调，防止温漂)
     float acc_mag = sqrtf(ax*ax + ay*ay + az*az);
     
-    // 计算Gz的平均值和方差
-    float gz_sum = 0, gz_sq_sum = 0;
-    for (int i = 0; i < 10; i++) {
-        gz_sum += gz_history[i];
-        gz_sq_sum += gz_history[i] * gz_history[i];
-    }
-    float gz_mean = gz_sum / 10.0f;
-    float gz_variance = gz_sq_sum/10.0f - gz_mean*gz_mean;
-    
-    // 静止检测条件：
-    // 1. 加速度接近1g
-    // 2. 角速度小
-    // 3. Gz方差小（稳定性好）
-    int is_stationary = (fabsf(acc_mag - 1.0f) < 0.05f) &&
-                        (fabsf(gx_raw) < 0.3f) &&
-                        (fabsf(gy_raw) < 0.3f) &&
-                        (gz_variance < 0.01f);  // 方差小于0.01
-    
+    // 静止检测条件：加速度接近1g 且 角速度波动极小
+    int is_stationary = (fabsf(acc_mag - 1.0f) < 0.05f) && 
+                        (fabsf(gx_raw) < 0.2f) && 
+                        (fabsf(gy_raw) < 0.2f);
+
     if (is_stationary) {
         stationary_samples++;
-        
-        // Roll/Pitch零偏（较快更新）
-        if (stationary_samples > 50) {
-            float alpha = 0.02f;
-            gyro_bias_x = (1.0f - alpha) * gyro_bias_x + alpha * gx_raw;
-            gyro_bias_y = (1.0f - alpha) * gyro_bias_y + alpha * gy_raw;
-        }
-        
-        // Yaw零偏估计（需要长时间静止）
-        if (stationary_samples > 200) {  // 1.8秒
-            // 长时间静止下的Gz均值作为零偏
-            static float long_term_gz_sum = 0;
-            static uint32_t long_term_cnt = 0;
-            
-            long_term_gz_sum += gz_raw;
-            long_term_cnt++;
-            
-            if (long_term_cnt > 500) {  // 6秒数据
-                gyro_bias_z = long_term_gz_sum / long_term_cnt;
-                long_term_gz_sum = 0;
-                long_term_cnt = 0;
-                
-                // 限制零偏范围
-                gyro_bias_z = fmaxf(fminf(gyro_bias_z, 0.1f), -0.1f);
+        if (stationary_samples > 200) { // 持续静止一段时间后微调零偏
+            float alpha_bias = 0.001f; // 极小的更新权重，防止误调
+            gyro_bias_x = (1.0f - alpha_bias) * gyro_bias_x + alpha_bias * gx_raw;
+            gyro_bias_y = (1.0f - alpha_bias) * gyro_bias_y + alpha_bias * gy_raw;
+            // Yaw轴零偏通常只在长时间完全静止时更新
+            if (stationary_samples > 1000) {
+                gyro_bias_z = (1.0f - alpha_bias) * gyro_bias_z + alpha_bias * gz_raw;
             }
         }
     } else {
         stationary_samples = 0;
     }
-    
-    // ============ Yaw漂移补偿 ============
-    // 如果长时间小角度运动，可能是漂移
-    static float yaw_movement_sum = 0;
-    static uint32_t yaw_check_cnt = 0;
-    
-    if (fabsf(gz_raw - gyro_bias_z) < 0.1f) {  // 小角速度
-        yaw_movement_sum += (gz_raw - gyro_bias_z);
-        yaw_check_cnt++;
-        
-        if (yaw_check_cnt > 500) {  // 3秒
-            float avg_yaw_rate = yaw_movement_sum / yaw_check_cnt;
-            
-            // 如果平均角速度很小但有持续趋势，可能是漂移
-            if (fabsf(avg_yaw_rate) > 0.01f && fabsf(avg_yaw_rate) < 0.5f) {
-                yaw_drift_compensation -= avg_yaw_rate * 0.1f;  // 反向补偿
-            }
-            
-            yaw_movement_sum = 0;
-            yaw_check_cnt = 0;
-        }
-    }
-    
-    // ============ 应用补偿 ============
+
+    // 3. 应用补偿后的角速度
     float gx = gx_raw - gyro_bias_x;
     float gy = gy_raw - gyro_bias_y;
-    float gz = gz_raw - gyro_bias_z + yaw_drift_compensation;
+    float gz = gz_raw - gyro_bias_z;
+
+    // 4. 计算加速度计提供的观察角 (度)
+    // 注意：BMI088 背面安装时，Z轴方向可能需要根据你的 Read_Acc 转换结果确认符号
+    float acc_roll  = atan2f(ay, az) * 57.29578f;
+    float acc_pitch = atan2f(-ax, sqrtf(ay*ay + az*az)) * 57.29578f;
+
+    // 5. 互补滤波 (Complementary Filter)
+    // 核心公式: Angle = K * (Angle + Gyro * dt) + (1-K) * Acc_Angle
+    // K值越大，越信任陀螺仪（抗震好，但随时间漂移）；K值越小，越信任加速度计（不漂移，但怕震动）
+    float K = 0.985f; 
+
+    // Roll & Pitch 融合解算
+    eulerAngle->roll  = K * (eulerAngle->roll  + gy * dt) + (1.0f - K) * acc_roll;
+    eulerAngle->pitch = K * (eulerAngle->pitch + gx * dt) + (1.0f - K) * acc_pitch;
+
+    // 6. Yaw 轴处理
+    // Yaw轴无法通过加速度计修正，只能纯积分。
+    // 如果有磁力计，可在此处加入磁力计修正。
     
-    // Gz死区和低通滤波
-    if (fabsf(gz) < 0.05f) gz = 0;  // 0.05°/s死区
+    // Gz 死区处理：消除静止时的微小爬行
+    if (fabsf(gz) < 0.08f) gz = 0; 
     
-    static float gz_lpf = 0;
-    gz_lpf = 0.6f * gz_lpf + 0.4f * gz;
-    
-    // ============ 积分 ============
-    gyro_roll += gy * dt;
-    gyro_pitch += gx * dt;
-    gyro_yaw += gz_lpf * dt;
-    
-    // ============ 加速度计角度 ============
-    float acc_roll = atan2f(ay, az) * 57.29578f;
-    float denom = sqrtf(ay*ay + az*az);
-    float acc_pitch = (denom > 0.01f) ? atan2f(-ax, denom) * 57.29578f : 0;
-    
-    // // ============ 自适应权重 ============
-    // float weight = (acc_mag > 1.2f || acc_mag < 0.8f) ? 0.8f : 0.98f;
-    float weight;
-    if (acc_mag > 1.2) {
-        // 快速运动或剧烈振动状态，减小加速度计权重
-        weight = 0.8f;
-    } else {
-        // 正常运动状态，强烈信任加速度计
-        weight = 0.98f;
-    }
-    // ============ 融合 ============
-    eulerAngle->roll = weight * acc_roll + (1.0f - weight) * gyro_roll;
-    eulerAngle->pitch = weight * acc_pitch + (1.0f - weight) * gyro_pitch;
-    
-    // Yaw特殊处理：限制积分速度
-    static float last_yaw = 0;
-    float yaw_diff = gyro_yaw - last_yaw;
-    
-    // 限制单次积分变化量
-    if (fabsf(yaw_diff) > 7.0f * dt) {  // 最大1°/s * dt
-        gyro_yaw = last_yaw + copysignf(7.0f * dt, yaw_diff);
-    }
-    
-    eulerAngle->yaw = gyro_yaw;
-    last_yaw = gyro_yaw;
-    
-    // 角度限制
-    if (eulerAngle->roll > 180.0f) eulerAngle->roll -= 360.0f;
-    if (eulerAngle->roll < -180.0f) eulerAngle->roll += 360.0f;
-    if (eulerAngle->pitch > 180.0f) eulerAngle->pitch -= 360.0f;
-    if (eulerAngle->pitch < -180.0f) eulerAngle->pitch += 360.0f;
-    if (eulerAngle->yaw > 180.0f) eulerAngle->yaw -= 360.0f;
+    // Yaw 轴积分
+    eulerAngle->yaw += gz * dt;
+
+    // 7. 角度归一化 (-180 到 180 度)
+    if (eulerAngle->yaw > 180.0f)  eulerAngle->yaw -= 360.0f;
     if (eulerAngle->yaw < -180.0f) eulerAngle->yaw += 360.0f;
+    if (eulerAngle->pitch > 180.0f) eulerAngle->pitch -=360.0f;
+    if (eulerAngle->pitch < -180.0f) eulerAngle->pitch +=360.0f;
+    if (eulerAngle->roll > 180.0f) eulerAngle->roll -=360.0f;
+    if (eulerAngle->roll < -180.0f) eulerAngle->roll +=360.0f;    
 }
+
 /* 稳定可用的pitch、roll，yaw变化太快，实际15度，显示一百多度但能稳定在某个值 */
 // void IMU_GetEulerAngle(Gyro_Acc_Struct *gyroAccel,
 //                              EulerAngle_Struct *eulerAngle,
