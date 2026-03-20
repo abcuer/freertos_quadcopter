@@ -9,8 +9,8 @@
 // NRF24L01发送接收数据宽度定义
 #define TX_ADR_WIDTH    5                               // 5字节的地址宽度
 #define RX_ADR_WIDTH    5                               // 5字节的地址宽度
-#define TX_PLOAD_WIDTH  sizeof(RC_Frame_Struct)         // 用户数据宽度
-#define RX_PLOAD_WIDTH  sizeof(RC_Frame_Struct)         // 用户数据宽度
+#define TX_PLOAD_WIDTH  sizeof(TX_Frame_Struct)         // 用户数据宽度
+#define RX_PLOAD_WIDTH  sizeof(RX_Frame_Struct)         // 用户数据宽度
 
 /* GPIO控制宏重构 */
 #define Set_NRF24L01_CSN    HAL_GPIO_WritePin(GPIOB, NRF_CSN_Pin, GPIO_PIN_SET)
@@ -63,10 +63,13 @@
 #define FIFO_STATUS     0x17  // FIFO状态寄存器;bit0，RX FIFO寄存器空标志;bit1，RX FIFO满标志;bit2，3，保留
                               // bit4，TX FIFO空标志;bit5，TX FIFO满标志;bit6，1，循环发送上一数据包。0，不循环;
 /**********************************************************************************************************/
-#define MODEL_RX        1           // 普通接收
-#define MODEL_TX        2           // 普通发送
-#define MODEL_RX2       3           // 接收模式2，用于双向传输
-#define MODEL_TX2       4           // 发送模式2，用于双向传输
+typedef enum {
+    MODEL_RX = 1,   // 普通接收
+    MODEL_TX,       // 普通发送
+    MODEL_RX2,      // 接收模式2，用于双向传输
+    MODEL_TX2       // 发送模式2，用于双向传输
+} NRF_Mode_e;
+
 
 uint8_t NRF24L01_Write_Reg(uint8_t regaddr,uint8_t data);
 uint8_t NRF24L01_Read_Reg(uint8_t regaddr);
@@ -80,5 +83,6 @@ void NRF_TxPacket_AP(uint8_t *tx_buf, uint8_t len);
 
 uint8_t NRF24L01_Check(void);
 void NRF24L01_Init(void);
+void NRF_Init(uint8_t model, uint8_t ch);
 
 #endif

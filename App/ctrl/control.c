@@ -1,6 +1,5 @@
 #include "control.h"
 #include "motor.h"
-#include "pid.h"
 #include "imu.h"
 
 /*
@@ -42,7 +41,7 @@ PID_Struct pid_gyro_x = {.kp = 1.52f, .ki = 0.0f, .kd = 0.05f};
 PID_Struct pid_yaw = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
 PID_Struct pid_gyro_z = {.kp = 0.0f, .ki = 0.0f, .kd = 0.0f};
 
-void Flight_Calculate_PID(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, Remote_Data_Struct *rc_data, float dt)
+void Flight_Calculate_PID(Gyro_Acc_Struct *gyro_acc, EulerAngle_Struct *euler_angle, RX_Data_Struct *rc_data, float dt)
 {
     // 计算俯仰角 (Pitch) PID
     pid_pitch.desire = (float)(rc_data->PIT - 1500) * 0.02f;            // 期望值（来自遥控器）

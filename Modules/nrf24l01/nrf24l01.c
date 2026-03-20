@@ -195,7 +195,7 @@ uint8_t NRF24L01_Check(void)
     return 0; // 成功
 }
 
-static void NRF_Init(uint8_t model, uint8_t ch)
+void NRF_Init(uint8_t model, uint8_t ch)
 {
 	Clr_NRF24L01_CE;
 	
@@ -248,8 +248,12 @@ void NRF24L01_Init(void)
 {
     // 1. 检查硬件是否在线
     while(NRF24L01_Check());
-    // 2. 配置为接收模式
-    NRF24L01_RX_Mode();
+    
+    // 2. 配置为双向接收模式
+    NRF_Init(MODEL_RX2, CONNECT_CHANNAL);
+    // NRF24L01_TX_Mode();
+    // SetLedMode(rLED_UP, LED_ON);
+    // SetLedMode(rLED_DOWN, LED_OFF);
 }
 
 

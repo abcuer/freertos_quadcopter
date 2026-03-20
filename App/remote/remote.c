@@ -1,27 +1,65 @@
 #include "remote.h"
 #include "nrf24l01.h"
+#include "power.h"
+#include "control.h"
 
-Remote_Data_Struct flight_rc_data = {0}; 
+RX_Data_Struct flight_rc_data = {0}; 
+TX_Data_Struct flight_status_data = {0}; // 飞控状态数据
+TX_Frame_Struct status_frame;            // 回传数据帧
 
 /**
  * @brief 计算数据帧的校验和
  * @param frame 数据帧指针
  * @return 计算得到的校验和
  */
-static uint8_t Calculate_Checksum(RC_Frame_Struct *frame)
+static uint8_t Calculate_Checksum(RX_Frame_Struct *frame)
 {
     uint8_t checksum = 0;
     uint8_t *data = (uint8_t *)frame;
     // 遍历长度为 14 - 1 = 13
-    for (int i = 0; i < sizeof(RC_Frame_Struct) - 1; i++) {
+    for (int i = 0; i < sizeof(RX_Frame_Struct) - 1; i++) {
         checksum ^= data[i];
     }
     return checksum;
 }
 
-static uint8_t Remote_ParseData(uint8_t *rx_buf, Remote_Data_Struct *rc_data)
+/**
+ * @brief 计算回传帧的校验和
+ */
+static uint8_t Calculate_Status_Checksum(TX_Frame_Struct *frame)
 {
-    RC_Frame_Struct *frame_ptr = (RC_Frame_Struct *)rx_buf;
+    uint8_t checksum = 0;
+    uint8_t *data = (uint8_t *)frame;
+    for (int i = 0; i < sizeof(TX_Frame_Struct) - 1; i++) {
+        checksum ^= data[i];
+    }
+    return checksum;
+}
+
+/**
+ * @brief 打包飞控状态数据
+ */
+void Remote_PackStatusData(void)
+{
+    status_frame.header[0] = FRAME0;
+    status_frame.header[1] = FRAME1;
+    status_frame.header[2] = FRAME2;
+    
+    // 填充实时姿态与PID (这些变量由飞控算法更新)
+    status_frame.pitch = euler_angle.pitch;
+    status_frame.roll  = euler_angle.roll;
+    status_frame.yaw   = euler_angle.yaw;
+    status_frame.pid_kp = pid_gyro_y.kp;
+    status_frame.pid_ki = pid_gyro_y.ki;
+    status_frame.pid_kd = pid_gyro_y.kd;
+    status_frame.voltage = Voltage_Check(); // 转为mV
+    
+    status_frame.checksum = Calculate_Status_Checksum(&status_frame);
+}
+
+static uint8_t Remote_ParseData(uint8_t *rx_buf, RX_Data_Struct *rx_data)
+{
+    RX_Frame_Struct *frame_ptr = (RX_Frame_Struct *)rx_buf;
 
     if (frame_ptr->header[0] != FRAME0 ||
         frame_ptr->header[1] != FRAME1 ||
@@ -31,12 +69,12 @@ static uint8_t Remote_ParseData(uint8_t *rx_buf, Remote_Data_Struct *rc_data)
     if (Calculate_Checksum(frame_ptr) != frame_ptr->checksum)
         return 0;
 
-    rc_data->THR = frame_ptr->THR;
-    rc_data->YAW = frame_ptr->YAW;
-    rc_data->PIT = frame_ptr->PIT;
-    rc_data->ROL = frame_ptr->ROL;
-    rc_data->FIX_HEIGHT = frame_ptr->FIX_HEIGHT;
-    rc_data->LOCK_KEY = frame_ptr->LOCK_KEY;
+    rx_data->THR = frame_ptr->THR;
+    rx_data->YAW = frame_ptr->YAW;
+    rx_data->PIT = frame_ptr->PIT;
+    rx_data->ROL = frame_ptr->ROL;
+    rx_data->FIX_HEIGHT = frame_ptr->FIX_HEIGHT;
+    rx_data->LOCK_KEY = frame_ptr->LOCK_KEY;
     return 1;
 }
 
@@ -57,6 +95,11 @@ void Remote_ReceiveData(void)
         {
             if(success_cnt < 2) success_cnt++;
             fail_cnt = 0;
+            // --- 新增：准备并装载下一次回传的数据 ---
+            // 注意：ACK Payload 是“预装载”机制，当前装载的数据会在遥控器下一次发包时带回   
+            Voltage_Check();
+            Remote_PackStatusData();
+            NRF_TxPacket_AP((uint8_t*)&status_frame, sizeof(TX_Frame_Struct));
         }
     }  
     else 
@@ -84,7 +127,7 @@ void Remote_ReceiveData(void)
         else
         {
             // 重新连接
-            NRF24L01_RX_Mode();
+            NRF_Init(MODEL_RX2, CONNECT_CHANNAL);
             flight_rc_data.NRF_ERR = 0;
         }
     }
